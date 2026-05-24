@@ -1,338 +1,510 @@
 package qimen
 
 import (
-	"github.com/6tail/tyme4go/tyme"
+	"fmt"
+	"iter"
+	"time"
+
+	"github.com/atopx/qimen/almanac"
+	"github.com/atopx/qimen/enum"
+	"github.com/atopx/qimen/hexagram"
+	"github.com/atopx/qimen/internal/compute"
+	"github.com/atopx/qimen/internal/tables"
+	"github.com/atopx/qimen/palace"
+	"github.com/atopx/qimen/pattern"
+	"github.com/atopx/qimen/plate"
+	"github.com/atopx/qimen/shensha"
+	"github.com/atopx/qimen/terrain"
 )
 
-// Qimen 奇门遁甲盘。一次起局后所有盘面信息的不可变快照。
-type Qimen struct {
-	solarTime tyme.SolarTime
-	options   QimenOptions
-	year      tyme.SixtyCycle
-	month     tyme.SixtyCycle
-	day       tyme.SixtyCycle
-	hour      tyme.SixtyCycle
-	term      tyme.SolarTerm
-	yinYang   tyme.YinYang
-	ju        uint8
-	yuan      QimenYuan
-	xunShou   tyme.HeavenStem
-	zhiFu     QimenDutyStar
-	zhiShi    QimenDutyDoor
-	kongWang  [2]tyme.EarthBranch
-	palaces   [9]*QimenPalace
+// Chart is the result of one qimen 起局. Once built, all fields are
+// read-only and safe to share across goroutines.
+type Chart struct {
+	cfg chartCfg
+
+	// Pillars + solar context
+	solar    almanac.SolarTime
+	pillars  almanac.Pillars
+	term     almanac.Term
+	yinYang  almanac.YinYang
+	ju       uint8
+	yuan     enum.Yuan
+	xunShou  almanac.Stem
+	zhiFu    Duty
+	zhiShi   DutyDoor
+	kongWang [2]almanac.Branch
+	lunarDay almanac.LunarDay // cached at build for O(1) LunarDay() access
+
+	// Palaces (1..9; index = palace number - 1).
+	// Stored by value to avoid 9 heap allocations per chart.
+	palaces [9]palace.Palace
 }
 
-// FromSolarTime 由阳历时间使用默认参数 (时家三元) 起局。默认参数下不会失败。
-func FromSolarTime(t tyme.SolarTime) *Qimen {
-	q, err := FromSolarTimeWithOptions(t, DefaultOptions())
-	if err != nil {
-		panic("default options must succeed: " + err.Error())
+// config holds optional construction parameters set via Option.
+// loc applies only at the entry points that accept a time / Unix instant;
+// it is consumed and discarded before reaching build().
+type config struct {
+	method enum.Method
+	style  enum.Style
+	loc    *time.Location
+}
+
+// chartCfg is the slimmed config persisted inside Chart — only the
+// fields needed by Method()/Style() accessors.
+type chartCfg struct {
+	method enum.Method
+	style  enum.Style
+}
+
+// Option configures a Chart constructor.
+type Option func(*config)
+
+// WithMethod selects the 起局 method (currently only [enum.MethodTime]).
+func WithMethod(m enum.Method) Option {
+	return func(c *config) { c.method = m }
+}
+
+// WithStyle selects the chart style (currently only [enum.StyleRotate]).
+func WithStyle(s enum.Style) Option {
+	return func(c *config) { c.style = s }
+}
+
+// Duty is the 值符 entry: the 九星 currently acting as 值符, its
+// originating palace, and the palace it has rotated into.
+type Duty struct {
+	Star           enum.Star
+	OriginalPalace uint8
+	Palace         uint8
+}
+
+// DutyDoor is the 值使 entry: the 八门 currently acting as 值使,
+// its originating palace, and where it has rotated.
+type DutyDoor struct {
+	Door           enum.Door
+	OriginalPalace uint8
+	Palace         uint8
+}
+
+// defaultConfig returns the default construction options:
+// 时家 / 转盘 / Asia/Shanghai (UTC+8).
+func defaultConfig() config {
+	return config{
+		method: enum.MethodTime,
+		style:  enum.StyleRotate,
+		loc:    time.FixedZone("CST", 8*3600),
 	}
-	return q
 }
 
-// FromSolarTimeWithOptions 由阳历时间与自定义参数起局。
+// New builds a chart for the current solar instant in UTC+8.
 //
-// 错误情形:
-//   - ErrCodeUnsupportedMethod — 当前仅支持 [QimenMethodTime]
-//   - ErrCodeUnsupportedChartType — 当前仅支持 [QimenChartTypeSanYuan]
-//   - ErrCodeUnsupportedTerm — 节气索引越界
-func FromSolarTimeWithOptions(t tyme.SolarTime, opts QimenOptions) (*Qimen, error) {
-	if err := validateOptions(opts); err != nil {
-		return nil, err
+// Construction with default options is infallible; this avoids forcing
+// callers to handle an error in the most common code path.
+func New(opts ...Option) *Chart {
+	cfg := defaultConfig()
+	for _, o := range opts {
+		o(&cfg)
 	}
-
-	sch := t.GetSixtyCycleHour()
-	year := sch.GetYear()
-	month := sch.GetMonth()
-	day := sch.GetDay()
-	hour := sch.GetSixtyCycle()
-	term := t.GetTerm()
-	yinYang := computeYinYang(t)
-	yuan := computeYuan(day)
-	ju, err := computeJu(term, yuan)
+	st := almanac.Now()
+	chart, err := build(st, cfg)
 	if err != nil {
+		panic("qimen.New: default options must succeed: " + err.Error())
+	}
+	return chart
+}
+
+// From builds a chart from a [almanac.SolarTime].
+func From(t almanac.SolarTime, opts ...Option) (*Chart, error) {
+	cfg := defaultConfig()
+	for _, o := range opts {
+		o(&cfg)
+	}
+	return build(t, cfg)
+}
+
+// MustFrom is like From but panics on error. Useful for tests and
+// scripts that supply hard-coded inputs.
+func MustFrom(t almanac.SolarTime, opts ...Option) *Chart {
+	chart, err := From(t, opts...)
+	if err != nil {
+		panic("qimen.MustFrom: " + err.Error())
+	}
+	return chart
+}
+
+// FromTime builds a chart from a standard library [time.Time]. The
+// for this entry point.
+func FromTime(t time.Time, opts ...Option) (*Chart, error) {
+	cfg := defaultConfig()
+	for _, o := range opts {
+		o(&cfg)
+	}
+	st, err := almanac.SolarTimeFromTime(t)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidTime, err)
+	}
+	return build(st, cfg)
+}
+
+// FromTimestamp builds a chart from a Unix-seconds timestamp.
+// The default location is UTC+8.
+func FromTimestamp(unix int64, opts ...Option) (*Chart, error) {
+	cfg := defaultConfig()
+	for _, o := range opts {
+		o(&cfg)
+	}
+	t := time.Unix(unix, 0).In(cfg.loc)
+	st, err := almanac.SolarTimeFromTime(t)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidTime, err)
+	}
+	return build(st, cfg)
+}
+
+// validateConfig checks Method + Style at the single Chart entry point.
+// Returns sentinel errors that wrap to errors.Is matchers.
+func validateConfig(cfg config) error {
+	if cfg.method != enum.MethodTime {
+		return fmt.Errorf("%w: %s", ErrUnsupportedMethod, cfg.method.Name())
+	}
+	if cfg.style != enum.StyleRotate {
+		return fmt.Errorf("%w: %s", ErrUnsupportedStyle, cfg.style.Name())
+	}
+	return nil
+}
+
+// build is the shared chart-construction routine.
+func build(t almanac.SolarTime, cfg config) (*Chart, error) {
+	if err := validateConfig(cfg); err != nil {
 		return nil, err
 	}
 
-	earth := buildEarthPlate(yinYang, ju)
-	xunShou := computeXunShou(hour)
-	hourStem := hour.GetHeavenStem()
+	pillars := t.Pillars()
+	term := t.Term()
+	yinYang := compute.YinYang(t)
+	yuan := compute.Yuan(pillars.Day)
+	ju := compute.Ju(term, yuan)
+
+	// Build the 6 plates. Style was validated at entry; primitives are
+	// total functions assuming StyleRotate semantics.
+	earth := plate.BuildEarth(yinYang, ju)
+
+	xunShou := compute.XunShou(pillars.Hour)
+	hourStem := pillars.Hour.Stem()
 
 	zhiFuOriginalPalace := uint8(2)
-	if p := findStemPalace(earth, xunShou, true); p != nil {
-		zhiFuOriginalPalace = *p
+	if p, ok := plate.FindStem(earth, xunShou, true); ok {
+		zhiFuOriginalPalace = p
 	}
-	zhiFuPalace := findHourStemPalace(earth, hourStem, zhiFuOriginalPalace)
+	zhiFuPalace := plate.FindHourStem(earth, hourStem, zhiFuOriginalPalace)
 
-	heaven := buildHeavenPlate(earth, yinYang, zhiFuOriginalPalace, zhiFuPalace)
-	stars := buildStarPlate(zhiFuOriginalPalace, zhiFuPalace)
-	doors := buildDoorPlate(yinYang, zhiFuOriginalPalace, hour)
-	gods := buildGodPlate(yinYang, zhiFuPalace)
-	hidden := buildHiddenPlate(yinYang)
+	heaven := plate.BuildHeaven(earth, yinYang, zhiFuOriginalPalace, zhiFuPalace)
+	stars := plate.BuildStar(zhiFuOriginalPalace, zhiFuPalace)
+	doors := plate.BuildDoor(yinYang, zhiFuOriginalPalace, pillars.Hour)
+	gods := plate.BuildGod(yinYang, zhiFuPalace)
+	hidden := plate.BuildHidden(yinYang)
 
-	zhiFuStar := QimenStarQinRui
-	if s := stars.Get(zhiFuPalace); s != nil {
-		zhiFuStar = *s
+	// Resolve 值符 (star landing on zhiFuPalace).
+	zhiFuStar := enum.StarQinRui
+	if s, ok := stars.Get(zhiFuPalace); ok {
+		zhiFuStar = s
 	}
-	zhiShiDoor := QimenDoorDeath
-	if d := QimenDoorFromPalace(zhiFuOriginalPalace); d != nil {
-		zhiShiDoor = *d
+	// Resolve 值使 door (originating door from zhiFuOriginalPalace).
+	// zhiFuOriginalPalace is sourced from earth-plate stem search which
+	// only returns non-center palaces; DoorOfPalace is safe here.
+	zhiShiDoor := enum.DoorDeath
+	if zhiFuOriginalPalace != 5 {
+		zhiShiDoor = enum.DoorOfPalace(zhiFuOriginalPalace)
 	}
 	zhiShiPalace := zhiFuPalace
-	if p := findDoorPalace(doors, zhiShiDoor); p != nil {
-		zhiShiPalace = *p
+	if p, ok := plate.FindDoor(doors, zhiShiDoor); ok {
+		zhiShiPalace = p
 	}
 
-	kongWang := computeKongWang(hour)
+	kongWang := compute.KongWang(pillars.Hour)
 
-	// 构造盘面骨架
-	var palaces [9]*QimenPalace
+	// Assemble 9 palaces in place (no heap allocations).
+	var palaces [9]palace.Palace
 	for i := 0; i < 9; i++ {
 		n := uint8(i + 1)
-		var earthStem tyme.HeavenStem
-		if v := earth.Get(n); v != nil {
-			earthStem = *v
-		} else {
-			earthStem = tyme.HeavenStem{}.FromIndex(0)
-		}
+		earthStem, _ := earth.Get(n)
 		heavenStem := earthStem
-		if v := heaven.Get(n); v != nil {
-			heavenStem = *v
+		if v, ok := heaven.Get(n); ok {
+			heavenStem = v
 		}
 		hiddenStem := earthStem
-		if v := hidden.Get(n); v != nil {
-			hiddenStem = *v
+		if v, ok := hidden.Get(n); ok {
+			hiddenStem = v
 		}
-		palaces[i] = &QimenPalace{
-			Number:           n,
-			PalaceName:       PalaceNames[n],
-			Direction:        tyme.Direction{}.FromIndex(int(n) - 1),
-			EarthBranches:    branchesForPalace(n),
-			EarthHeavenStem:  earthStem,
-			SanQiLiuYi:       earthStem,
-			HeavenHeavenStem: heavenStem,
-			HiddenHeavenStem: hiddenStem,
-			Star:             stars.Get(n),
-			Door:             doors.Get(n),
-			God:              gods.Get(n),
-		}
-	}
-
-	// 衍生属性 (十神 / 长生 / 64 卦)
-	dayStem := day.GetHeavenStem()
-	for _, p := range palaces {
-		if p.Number != 5 {
-			ts := dayStem.GetTenStar(p.EarthHeavenStem)
-			p.TenStar = &ts
-		}
-		if len(p.EarthBranches) > 0 {
-			tt := NewTerrain(dayStem.GetTerrain(p.EarthBranches[0]))
-			p.TerrainValue = &tt
-		}
-		// 卦: 上 = 该宫门的本宫卦, 下 = 该宫宫位卦; 中宫或无门时为 nil
-		lower := TrigramFromPalace(p.Number)
-		if lower != nil && p.Door != nil {
-			upper := TrigramFromPalace(p.Door.HomePalace())
-			if upper != nil {
-				h := NewHexagram(*upper, *lower)
-				p.Hexagram = &h
-			}
+		p := &palaces[i]
+		p.Number = n
+		p.Name = tables.PalaceNames[n]
+		p.Direction = almanac.DirectionOfPalace(n)
+		p.Branches = compute.BranchesForPalace(n)
+		p.EarthStem = earthStem
+		p.HeavenStem = heavenStem
+		p.HiddenStem = hiddenStem
+		p.SanQiLiuYi = earthStem
+		// Star / Door / God only populated for non-center palaces
+		// (BuildStar/Door/God iterate LuoShuOrder which excludes palace 5).
+		if n != 5 {
+			p.Star, _ = stars.Get(n)
+			p.Door, _ = doors.Get(n)
+			p.God, _ = gods.Get(n)
 		}
 	}
 
-	// 格局检测 + 分发
-	patternList := detectPatterns(zhiFuOriginalPalace, zhiFuPalace, palaces, kongWang)
-	for _, pat := range patternList {
+	// Derived attributes (十神 / 长生 / 六十四卦) — only for non-center palaces.
+	dayStem := pillars.Day.Stem()
+	for i := range palaces {
+		p := &palaces[i]
+		if p.IsCenter() {
+			continue
+		}
+		p.TenStar = dayStem.TenStarOf(p.EarthStem)
+		p.Terrain = terrain.Of(dayStem.TerrainOf(p.Branches[0]))
+		// Hexagram: upper = door's home palace trigram, lower = this palace's trigram.
+		lower := hexagram.TrigramOfPalace(p.Number)
+		upper := hexagram.TrigramOfPalace(p.Door.HomePalace())
+		p.Hexagram = hexagram.Of(upper, lower)
+	}
+
+	// Pattern detection (build input view, then dispatch results to palaces).
+	pIn := pattern.DetectInput{
+		ZhiFuOriginalPalace: zhiFuOriginalPalace,
+		ZhiFuPalace:         zhiFuPalace,
+		KongWang:            kongWang,
+	}
+	for i := 0; i < 9; i++ {
+		p := &palaces[i]
+		pIn.EarthStems[i] = p.EarthStem
+		pIn.HeavenStems[i] = p.HeavenStem
+		if !p.IsCenter() {
+			pIn.Doors[i] = p.Door
+			pIn.DoorsSet[i] = true
+			pIn.Gods[i] = p.God
+			pIn.GodsSet[i] = true
+		}
+		pIn.Branches[i] = p.Branches
+	}
+	for pat := range pattern.Detect(pIn) {
 		n := pat.Palace
 		if n >= 1 && n <= 9 {
 			palaces[n-1].Patterns = append(palaces[n-1].Patterns, pat)
 		}
 	}
 
-	// 神煞检测 + 分发
-	shenShaList := detectShenSha(
-		year.GetHeavenStem(),
-		month.GetEarthBranch(),
-		dayStem,
-		day.GetEarthBranch(),
-		earth,
-	)
-	for _, ss := range shenShaList {
-		n := ss.PalaceCell
+	// 神煞 detection.
+	ssIn := shensha.DetectInput{
+		YearStem:    pillars.Year.Stem(),
+		MonthBranch: pillars.Month.Branch(),
+		DayStem:     dayStem,
+		DayBranch:   pillars.Day.Branch(),
+	}
+	for i := 0; i < 9; i++ {
+		ssIn.EarthStems[i] = palaces[i].EarthStem
+	}
+	for ss := range shensha.Detect(ssIn) {
+		n := ss.Palace
 		if n >= 1 && n <= 9 {
 			palaces[n-1].ShenSha = append(palaces[n-1].ShenSha, ss)
 		}
 	}
 
-	return &Qimen{
-		solarTime: t,
-		options:   opts,
-		year:      year,
-		month:     month,
-		day:       day,
-		hour:      hour,
-		term:      term,
-		yinYang:   yinYang,
-		ju:        ju,
-		yuan:      yuan,
-		xunShou:   xunShou,
-		zhiFu:     QimenDutyStar{Star: zhiFuStar, OriginalPalace: zhiFuOriginalPalace, Palace: zhiFuPalace},
-		zhiShi:    QimenDutyDoor{Door: zhiShiDoor, OriginalPalace: zhiFuOriginalPalace, Palace: zhiShiPalace},
-		kongWang:  kongWang,
-		palaces:   palaces,
+	return &Chart{
+		cfg:      chartCfg{method: cfg.method, style: cfg.style},
+		solar:    t,
+		pillars:  pillars,
+		term:     term,
+		yinYang:  yinYang,
+		ju:       ju,
+		yuan:     yuan,
+		xunShou:  xunShou,
+		zhiFu:    Duty{Star: zhiFuStar, OriginalPalace: zhiFuOriginalPalace, Palace: zhiFuPalace},
+		zhiShi:   DutyDoor{Door: zhiShiDoor, OriginalPalace: zhiFuOriginalPalace, Palace: zhiShiPalace},
+		kongWang: kongWang,
+		lunarDay: t.LunarDay(),
+		palaces:  palaces,
 	}, nil
 }
 
-func validateOptions(opts QimenOptions) error {
-	if opts.Method != QimenMethodTime {
-		return newUnsupportedMethod(opts.Method)
-	}
-	if opts.ChartType != QimenChartTypeSanYuan {
-		return newUnsupportedChartType(opts.ChartType)
-	}
-	return nil
-}
+// ===================== context accessors =====================
 
-// ===================== 公共访问器 =====================
+// SolarTime returns the solar instant used to build the chart.
+func (c *Chart) SolarTime() almanac.SolarTime { return c.solar }
 
-// SolarTime 起局所用阳历时间。
-func (q *Qimen) SolarTime() tyme.SolarTime { return q.solarTime }
+// LunarDay returns the lunar date of the chart's solar instant
+// (cached at build for O(1) access).
+func (c *Chart) LunarDay() almanac.LunarDay { return c.lunarDay }
 
-// Options 起局参数。
-func (q *Qimen) Options() QimenOptions { return q.options }
+// Method returns the chart's 起局法门 (currently always MethodTime).
+func (c *Chart) Method() enum.Method { return c.cfg.method }
 
-// Year 年柱。
-func (q *Qimen) Year() tyme.SixtyCycle { return q.year }
+// Style returns the chart's 盘式 (currently always StyleRotate).
+func (c *Chart) Style() enum.Style { return c.cfg.style }
 
-// Month 月柱。
-func (q *Qimen) Month() tyme.SixtyCycle { return q.month }
+// Year returns the 年柱 sixty cycle.
+func (c *Chart) Year() almanac.Cycle { return c.pillars.Year }
 
-// Day 日柱。
-func (q *Qimen) Day() tyme.SixtyCycle { return q.day }
+// Month returns the 月柱 sixty cycle.
+func (c *Chart) Month() almanac.Cycle { return c.pillars.Month }
 
-// Hour 时柱。
-func (q *Qimen) Hour() tyme.SixtyCycle { return q.hour }
+// Day returns the 日柱 sixty cycle.
+func (c *Chart) Day() almanac.Cycle { return c.pillars.Day }
 
-// Term 节气。
-func (q *Qimen) Term() tyme.SolarTerm { return q.term }
+// Hour returns the 时柱 sixty cycle.
+func (c *Chart) Hour() almanac.Cycle { return c.pillars.Hour }
 
-// YinYang 阴阳遁。
-func (q *Qimen) YinYang() tyme.YinYang { return q.yinYang }
+// Term returns the current solar term.
+func (c *Chart) Term() almanac.Term { return c.term }
 
-// Ju 局数 (1..=9)。
-func (q *Qimen) Ju() uint8 { return q.ju }
+// YinYang returns the 阴/阳 遁.
+func (c *Chart) YinYang() almanac.YinYang { return c.yinYang }
 
-// Yuan 三元 (上/中/下元)。
-func (q *Qimen) Yuan() QimenYuan { return q.yuan }
+// Ju returns the local 局 number (1..9).
+func (c *Chart) Ju() uint8 { return c.ju }
 
-// XunShou 旬首 (戊/己/庚/辛/壬/癸 之一)。
-func (q *Qimen) XunShou() tyme.HeavenStem { return q.xunShou }
+// Yuan returns the 三元 segment.
+func (c *Chart) Yuan() enum.Yuan { return c.yuan }
 
-// ZhiFu 值符。
-func (q *Qimen) ZhiFu() QimenDutyStar { return q.zhiFu }
+// XunShou returns the 旬首 stem.
+func (c *Chart) XunShou() almanac.Stem { return c.xunShou }
 
-// ZhiShi 值使。
-func (q *Qimen) ZhiShi() QimenDutyDoor { return q.zhiShi }
+// ZhiFu returns the 值符 duty record.
+func (c *Chart) ZhiFu() Duty { return c.zhiFu }
 
-// KongWang 旬空亡两支地支。
-func (q *Qimen) KongWang() [2]tyme.EarthBranch { return q.kongWang }
+// ZhiShi returns the 值使 duty record.
+func (c *Chart) ZhiShi() DutyDoor { return c.zhiShi }
 
-// Palaces 九宫数据数组 (索引 0..=8 对应宫位 1..=9)。
-func (q *Qimen) Palaces() [9]*QimenPalace { return q.palaces }
+// KongWang returns the 旬空亡 branch pair.
+func (c *Chart) KongWang() [2]almanac.Branch { return c.kongWang }
 
-// Palace 通过宫位号 O(1) 取宫。越界返回 nil。
-func (q *Qimen) Palace(number uint8) *QimenPalace {
-	if number < 1 || number > 9 {
+// ===================== palace access =====================
+
+// Palace returns the palace at number n (1..9), or nil when out of range.
+// Returned pointer aliases the chart's internal storage — do not mutate.
+func (c *Chart) Palace(n uint8) *palace.Palace {
+	if n < 1 || n > 9 {
 		return nil
 	}
-	return q.palaces[number-1]
+	return &c.palaces[n-1]
 }
 
-// GridLayout 三行三列九宫展示 ([巽离坤; 震中兑; 艮坎乾]), 返回引用网格。
-func (q *Qimen) GridLayout() [3][3]*QimenPalace {
-	var out [3][3]*QimenPalace
+// Palaces streams the 9 palaces in canonical (1..9) order.
+//
+// Yields (n, palace) pairs where n is the palace number (1-indexed).
+// The yielded pointer aliases the chart's internal storage.
+func (c *Chart) Palaces() iter.Seq2[uint8, *palace.Palace] {
+	return func(yield func(uint8, *palace.Palace) bool) {
+		for i := 0; i < 9; i++ {
+			if !yield(uint8(i+1), &c.palaces[i]) {
+				return
+			}
+		}
+	}
+}
+
+// Grid returns the 3×3 display grid [巽离坤; 震中兑; 艮坎乾].
+func (c *Chart) Grid() [3][3]*palace.Palace {
+	var out [3][3]*palace.Palace
 	for row := 0; row < 3; row++ {
 		for col := 0; col < 3; col++ {
-			out[row][col] = q.palaces[Grid[row][col]-1]
+			out[row][col] = &c.palaces[tables.Grid[row][col]-1]
 		}
 	}
 	return out
 }
 
-// StemPalace 任意天干在地盘所临之宫 (奇门"用神"基础查询)。
+// ===================== user-stem queries =====================
+
+// StemPalace returns the palace where a heavenly stem appears in the 地盘.
 //
-//   - 甲 (idx 0): 甲遁不可见, 以值符原宫 (旬首所临之宫) 代之
-//   - 其他天干: 在 9 个 palace 的地盘干中线性查找
-//   - 中宫干: 寄 2 宫 (坤宫)
-func (q *Qimen) StemPalace(stem tyme.HeavenStem) uint8 {
-	idx := stem.GetIndex()
-	if idx == 0 {
-		return q.zhiFu.OriginalPalace
+//   - 甲 (idx 0) has no visible position; falls back to the 值符原宫.
+//   - Other stems are looked up; center palace stems are mapped to 2 (坤).
+func (c *Chart) StemPalace(stem almanac.Stem) uint8 {
+	if stem.Index() == 0 {
+		return c.zhiFu.OriginalPalace
 	}
-	for _, p := range q.palaces {
-		if p.EarthHeavenStem.GetIndex() == idx {
+	for i := range c.palaces {
+		p := &c.palaces[i]
+		if p.EarthStem.Index() == stem.Index() {
 			if p.Number == 5 {
 				return 2
 			}
 			return p.Number
 		}
 	}
-	return q.zhiFu.OriginalPalace
+	return c.zhiFu.OriginalPalace
 }
 
-// SelfPalace 日干用神 (自身位/主位) 所临之宫。
-//
-// 占测自己时, 以日柱天干为用神, 该天干在地盘所临之宫即"我"。
-func (q *Qimen) SelfPalace() uint8 { return q.StemPalace(q.day.GetHeavenStem()) }
+// SelfPalace returns the palace of the user (subject), keyed by 日干.
+func (c *Chart) SelfPalace() uint8 { return c.StemPalace(c.pillars.Day.Stem()) }
 
-// OpponentPalace 时干用神 (彼位/客位/事位) 所临之宫。
-//
-// 占测对方/事物时, 以时柱天干为用神, 与值符落宫同宫。
-func (q *Qimen) OpponentPalace() uint8 { return q.zhiFu.Palace }
+// OpponentPalace returns the palace of the counterpart / topic, which
+// classical qimen places at 值符落宫.
+func (c *Chart) OpponentPalace() uint8 { return c.zhiFu.Palace }
 
-// SanQiLiuYi 三奇六仪 (按宫位顺序枚举)。
-func (q *Qimen) SanQiLiuYi() []QimenHeavenStemPlacement {
-	out := make([]QimenHeavenStemPlacement, 0, 9)
-	for _, p := range q.palaces {
-		out = append(out, QimenHeavenStemPlacement{Palace: p.Number, HeavenStem: p.SanQiLiuYi})
+// ===================== aggregated streams =====================
+
+// Patterns streams every 格局 across the 9 palaces in palace order.
+func (c *Chart) Patterns() iter.Seq[pattern.Pattern] {
+	return func(yield func(pattern.Pattern) bool) {
+		for i := range c.palaces {
+			p := &c.palaces[i]
+			for _, pat := range p.Patterns {
+				if !yield(pat) {
+					return
+				}
+			}
+		}
 	}
-	return out
 }
 
-// TianPan 天盘干 (按宫位顺序枚举)。
-func (q *Qimen) TianPan() []QimenHeavenStemPlacement {
-	out := make([]QimenHeavenStemPlacement, 0, 9)
-	for _, p := range q.palaces {
-		out = append(out, QimenHeavenStemPlacement{Palace: p.Number, HeavenStem: p.HeavenHeavenStem})
+// ShenSha streams every 神煞 across the 9 palaces in palace order.
+func (c *Chart) ShenSha() iter.Seq[shensha.ShenSha] {
+	return func(yield func(shensha.ShenSha) bool) {
+		for i := range c.palaces {
+			p := &c.palaces[i]
+			for _, ss := range p.ShenSha {
+				if !yield(ss) {
+					return
+				}
+			}
+		}
 	}
-	return out
 }
 
-// HiddenHeavenStems 暗干 (按宫位顺序枚举)。
-func (q *Qimen) HiddenHeavenStems() []QimenHeavenStemPlacement {
-	out := make([]QimenHeavenStemPlacement, 0, 9)
-	for _, p := range q.palaces {
-		out = append(out, QimenHeavenStemPlacement{Palace: p.Number, HeavenStem: p.HiddenHeavenStem})
+// EarthStems streams the 地盘 stems with palace numbers.
+func (c *Chart) EarthStems() iter.Seq2[uint8, almanac.Stem] {
+	return func(yield func(uint8, almanac.Stem) bool) {
+		for i := range c.palaces {
+			p := &c.palaces[i]
+			if !yield(p.Number, p.EarthStem) {
+				return
+			}
+		}
 	}
-	return out
 }
 
-// Patterns 全盘所有格局 (聚合 9 宫的 Patterns)。
-func (q *Qimen) Patterns() []Pattern {
-	var out []Pattern
-	for _, p := range q.palaces {
-		out = append(out, p.Patterns...)
+// HeavenStems streams the 天盘 stems with palace numbers.
+func (c *Chart) HeavenStems() iter.Seq2[uint8, almanac.Stem] {
+	return func(yield func(uint8, almanac.Stem) bool) {
+		for i := range c.palaces {
+			p := &c.palaces[i]
+			if !yield(p.Number, p.HeavenStem) {
+				return
+			}
+		}
 	}
-	return out
 }
 
-// ShenSha 全盘所有神煞 (聚合 9 宫的 ShenSha)。
-func (q *Qimen) ShenSha() []ShenSha {
-	var out []ShenSha
-	for _, p := range q.palaces {
-		out = append(out, p.ShenSha...)
+// HiddenStems streams the 暗干 stems with palace numbers.
+func (c *Chart) HiddenStems() iter.Seq2[uint8, almanac.Stem] {
+	return func(yield func(uint8, almanac.Stem) bool) {
+		for i := range c.palaces {
+			p := &c.palaces[i]
+			if !yield(p.Number, p.HiddenStem) {
+				return
+			}
+		}
 	}
-	return out
 }

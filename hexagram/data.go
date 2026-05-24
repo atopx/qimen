@@ -1,168 +1,9 @@
-package qimen
+package hexagram
 
-import "fmt"
+import "github.com/atopx/qimen/auspice"
 
-// Trigram 八卦。索引顺序: 0乾, 1兑, 2离, 3震, 4巽, 5坎, 6艮, 7坤。
-type Trigram int
-
-const (
-	// TrigramQian 乾 ☰ 天。
-	TrigramQian Trigram = iota
-	// TrigramDui 兑 ☱ 泽。
-	TrigramDui
-	// TrigramLi 离 ☲ 火。
-	TrigramLi
-	// TrigramZhen 震 ☳ 雷。
-	TrigramZhen
-	// TrigramXun 巽 ☴ 风。
-	TrigramXun
-	// TrigramKan 坎 ☵ 水。
-	TrigramKan
-	// TrigramGen 艮 ☶ 山。
-	TrigramGen
-	// TrigramKun 坤 ☷ 地。
-	TrigramKun
-)
-
-// TrigramFromPalace 由后天九宫宫位号取八卦 (中宫 5 返回 nil)。
-//
-// 1坎/2坤/3震/4巽/6乾/7兑/8艮/9离。
-func TrigramFromPalace(palace uint8) *Trigram {
-	var t Trigram
-	switch palace {
-	case 1:
-		t = TrigramKan
-	case 2:
-		t = TrigramKun
-	case 3:
-		t = TrigramZhen
-	case 4:
-		t = TrigramXun
-	case 6:
-		t = TrigramQian
-	case 7:
-		t = TrigramDui
-	case 8:
-		t = TrigramGen
-	case 9:
-		t = TrigramLi
-	default:
-		return nil
-	}
-	return &t
-}
-
-// Name 中文卦名 (乾/兑/...)。
-func (t Trigram) Name() string {
-	switch t {
-	case TrigramQian:
-		return "乾"
-	case TrigramDui:
-		return "兑"
-	case TrigramLi:
-		return "离"
-	case TrigramZhen:
-		return "震"
-	case TrigramXun:
-		return "巽"
-	case TrigramKan:
-		return "坎"
-	case TrigramGen:
-		return "艮"
-	case TrigramKun:
-		return "坤"
-	}
-	return ""
-}
-
-// Symbol 八卦符号 (☰☱☲☳☴☵☶☷)。
-func (t Trigram) Symbol() string {
-	switch t {
-	case TrigramQian:
-		return "☰"
-	case TrigramDui:
-		return "☱"
-	case TrigramLi:
-		return "☲"
-	case TrigramZhen:
-		return "☳"
-	case TrigramXun:
-		return "☴"
-	case TrigramKan:
-		return "☵"
-	case TrigramGen:
-		return "☶"
-	case TrigramKun:
-		return "☷"
-	}
-	return ""
-}
-
-// ElementName 八卦自然元素名 (天/泽/火/雷/风/水/山/地)。
-func (t Trigram) ElementName() string {
-	switch t {
-	case TrigramQian:
-		return "天"
-	case TrigramDui:
-		return "泽"
-	case TrigramLi:
-		return "火"
-	case TrigramZhen:
-		return "雷"
-	case TrigramXun:
-		return "风"
-	case TrigramKan:
-		return "水"
-	case TrigramGen:
-		return "山"
-	case TrigramKun:
-		return "地"
-	}
-	return ""
-}
-
-// String 实现 fmt.Stringer。
-func (t Trigram) String() string { return t.Name() }
-
-// Hexagram 六十四卦, 由上下两卦组成。
-type Hexagram struct {
-	upper Trigram
-	lower Trigram
-	index uint8
-}
-
-// NewHexagram 由上下两卦构造一个六十四卦。
-func NewHexagram(upper, lower Trigram) Hexagram {
-	idx := hexagramIndex[upper][lower]
-	return Hexagram{upper: upper, lower: lower, index: idx}
-}
-
-// Upper 上卦。
-func (h Hexagram) Upper() Trigram { return h.upper }
-
-// Lower 下卦。
-func (h Hexagram) Lower() Trigram { return h.lower }
-
-// Index 卦序 (周易序卦传 0..64)。
-func (h Hexagram) Index() uint8 { return h.index }
-
-// Symbol Unicode 卦象符号 (䷀..䷿)。
-func (h Hexagram) Symbol() string { return hexagramData[h.index].symbol }
-
-// Name 中文卦名。
-func (h Hexagram) Name() string { return hexagramData[h.index].name }
-
-// Summary 客观描述。
-func (h Hexagram) Summary() string { return hexagramData[h.index].summary }
-
-// Auspice 传统易学既定的吉凶定性。
-func (h Hexagram) Auspice() Auspice { return hexagramAuspice[h.index] }
-
-// String 实现 fmt.Stringer (符号 + 卦名)。
-func (h Hexagram) String() string { return fmt.Sprintf("%s %s", h.Symbol(), h.Name()) }
-
-// hexagramIndex 是 [upper][lower] → 周易序卦传索引的反查表。
-var hexagramIndex = [8][8]uint8{
+// indexTable maps (upper, lower) trigram pair → 周易序卦传 index.
+var indexTable = [8][8]uint8{
 	{0, 9, 12, 24, 43, 5, 32, 11},    // 乾
 	{42, 57, 48, 16, 27, 46, 30, 44}, // 兑
 	{13, 37, 29, 20, 49, 63, 55, 34}, // 离
@@ -173,14 +14,13 @@ var hexagramIndex = [8][8]uint8{
 	{10, 18, 35, 23, 45, 6, 14, 1},   // 坤
 }
 
-type hexagramEntry struct {
+type entry struct {
 	name    string
 	symbol  string
 	summary string
 }
 
-// hexagramData 卦序对应的 (中文名, Unicode 符号, 客观描述)。
-var hexagramData = [64]hexagramEntry{
+var dataTable = [64]entry{
 	{"乾为天", "䷀", "六十四卦之首。元亨利贞,刚健中正,自强不息。"},
 	{"坤为地", "䷁", "六十四卦第二卦。厚德载物,柔顺利贞,包容万物。"},
 	{"水雷屯", "䷂", "六十四卦之一。元亨利贞,初始艰难,宜守不宜进。"},
@@ -247,70 +87,73 @@ var hexagramData = [64]hexagramEntry{
 	{"火水未济", "䷿", "六十四卦末卦。亨,但须谨慎,事尚未完成。"},
 }
 
-// hexagramAuspice 卦序对应的传统易学吉凶定性 (5 级)。
-var hexagramAuspice = [64]Auspice{
-	AuspiceGreatAuspicious,   // 0  乾为天
-	AuspiceAuspicious,        // 1  坤为地
-	AuspiceInauspicious,      // 2  水雷屯
-	AuspiceNeutral,           // 3  山水蒙
-	AuspiceAuspicious,        // 4  水天需
-	AuspiceInauspicious,      // 5  天水讼
-	AuspiceNeutral,           // 6  地水师
-	AuspiceAuspicious,        // 7  水地比
-	AuspiceNeutral,           // 8  风天小畜
-	AuspiceAuspicious,        // 9  天泽履
-	AuspiceGreatAuspicious,   // 10 地天泰
-	AuspiceGreatInauspicious, // 11 天地否
-	AuspiceAuspicious,        // 12 天火同人
-	AuspiceGreatAuspicious,   // 13 火天大有
-	AuspiceAuspicious,        // 14 地山谦
-	AuspiceAuspicious,        // 15 雷地豫
-	AuspiceAuspicious,        // 16 泽雷随
-	AuspiceNeutral,           // 17 山风蛊
-	AuspiceAuspicious,        // 18 地泽临
-	AuspiceNeutral,           // 19 风地观
-	AuspiceNeutral,           // 20 火雷噬嗑
-	AuspiceNeutral,           // 21 山火贲
-	AuspiceGreatInauspicious, // 22 山地剥
-	AuspiceAuspicious,        // 23 地雷复
-	AuspiceNeutral,           // 24 天雷无妄
-	AuspiceAuspicious,        // 25 山天大畜
-	AuspiceAuspicious,        // 26 山雷颐
-	AuspiceInauspicious,      // 27 泽风大过
-	AuspiceGreatInauspicious, // 28 坎为水
-	AuspiceAuspicious,        // 29 离为火
-	AuspiceAuspicious,        // 30 泽山咸
-	AuspiceNeutral,           // 31 雷风恒
-	AuspiceNeutral,           // 32 天山遁
-	AuspiceAuspicious,        // 33 雷天大壮
-	AuspiceAuspicious,        // 34 火地晋
-	AuspiceInauspicious,      // 35 地火明夷
-	AuspiceAuspicious,        // 36 风火家人
-	AuspiceNeutral,           // 37 火泽睽
-	AuspiceGreatInauspicious, // 38 水山蹇
-	AuspiceAuspicious,        // 39 雷水解
-	AuspiceNeutral,           // 40 山泽损
-	AuspiceAuspicious,        // 41 风雷益
-	AuspiceNeutral,           // 42 泽天夬
-	AuspiceNeutral,           // 43 天风姤
-	AuspiceAuspicious,        // 44 泽地萃
-	AuspiceAuspicious,        // 45 地风升
-	AuspiceGreatInauspicious, // 46 泽水困
-	AuspiceNeutral,           // 47 水风井
-	AuspiceNeutral,           // 48 泽火革
-	AuspiceAuspicious,        // 49 火风鼎
-	AuspiceNeutral,           // 50 震为雷
-	AuspiceNeutral,           // 51 艮为山
-	AuspiceAuspicious,        // 52 风山渐
-	AuspiceInauspicious,      // 53 雷泽归妹
-	AuspiceNeutral,           // 54 雷火丰
-	AuspiceNeutral,           // 55 火山旅
-	AuspiceNeutral,           // 56 巽为风
-	AuspiceAuspicious,        // 57 兑为泽
-	AuspiceNeutral,           // 58 风水涣
-	AuspiceNeutral,           // 59 水泽节
-	AuspiceAuspicious,        // 60 风泽中孚
-	AuspiceNeutral,           // 61 雷山小过
-	AuspiceNeutral,           // 62 水火既济
-	AuspiceNeutral,           // 63 火水未济
+var auspiceTable = [64]auspice.Auspice{
+	auspice.GreatAuspicious,   // 0  乾为天
+	auspice.Auspicious,        // 1  坤为地
+	auspice.Inauspicious,      // 2  水雷屯
+	auspice.Neutral,           // 3  山水蒙
+	auspice.Auspicious,        // 4  水天需
+	auspice.Inauspicious,      // 5  天水讼
+	auspice.Neutral,           // 6  地水师
+	auspice.Auspicious,        // 7  水地比
+	auspice.Neutral,           // 8  风天小畜
+	auspice.Auspicious,        // 9  天泽履
+	auspice.GreatAuspicious,   // 10 地天泰
+	auspice.GreatInauspicious, // 11 天地否
+	auspice.Auspicious,        // 12 天火同人
+	auspice.GreatAuspicious,   // 13 火天大有
+	auspice.Auspicious,        // 14 地山谦
+	auspice.Auspicious,        // 15 雷地豫
+	auspice.Auspicious,        // 16 泽雷随
+	auspice.Neutral,           // 17 山风蛊
+	auspice.Auspicious,        // 18 地泽临
+	auspice.Neutral,           // 19 风地观
+	auspice.Neutral,           // 20 火雷噬嗑
+	auspice.Neutral,           // 21 山火贲
+	auspice.GreatInauspicious, // 22 山地剥
+	auspice.Auspicious,        // 23 地雷复
+	auspice.Neutral,           // 24 天雷无妄
+	auspice.Auspicious,        // 25 山天大畜
+	auspice.Auspicious,        // 26 山雷颐
+	auspice.Inauspicious,      // 27 泽风大过
+	auspice.GreatInauspicious, // 28 坎为水
+	auspice.Auspicious,        // 29 离为火
+	auspice.Auspicious,        // 30 泽山咸
+	auspice.Neutral,           // 31 雷风恒
+	auspice.Neutral,           // 32 天山遁
+	auspice.Auspicious,        // 33 雷天大壮
+	auspice.Auspicious,        // 34 火地晋
+	auspice.Inauspicious,      // 35 地火明夷
+	auspice.Auspicious,        // 36 风火家人
+	auspice.Neutral,           // 37 火泽睽
+	auspice.GreatInauspicious, // 38 水山蹇
+	auspice.Auspicious,        // 39 雷水解
+	auspice.Neutral,           // 40 山泽损
+	auspice.Auspicious,        // 41 风雷益
+	auspice.Neutral,           // 42 泽天夬
+	auspice.Neutral,           // 43 天风姤
+	auspice.Auspicious,        // 44 泽地萃
+	auspice.Auspicious,        // 45 地风升
+	auspice.GreatInauspicious, // 46 泽水困
+	auspice.Neutral,           // 47 水风井
+	auspice.Neutral,           // 48 泽火革
+	auspice.Auspicious,        // 49 火风鼎
+	auspice.Neutral,           // 50 震为雷
+	auspice.Neutral,           // 51 艮为山
+	auspice.Auspicious,        // 52 风山渐
+	auspice.Inauspicious,      // 53 雷泽归妹
+	auspice.Neutral,           // 54 雷火丰
+	auspice.Neutral,           // 55 火山旅
+	auspice.Neutral,           // 56 巽为风
+	auspice.Auspicious,        // 57 兑为泽
+	auspice.Neutral,           // 58 风水涣
+	auspice.Neutral,           // 59 水泽节
+	auspice.Auspicious,        // 60 风泽中孚
+	auspice.Neutral,           // 61 雷山小过
+	auspice.Neutral,           // 62 水火既济
+	auspice.Neutral,           // 63 火水未济
 }
+
+// StarElementName is unused but reserved for future API.
+// Element relationships for hexagrams use upper/lower trigram element pairs.
+var _ = auspice.Neutral
