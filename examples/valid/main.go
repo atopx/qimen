@@ -478,7 +478,6 @@ func patternDetailKey(p pattern.Pattern) string {
 	case pattern.KongWang:
 		detail = p.Branch.Name()
 	default:
-		panic("unhandled default case")
 	}
 	return fmt.Sprintf("%d|%s|%s", p.Palace, p.Name(), detail)
 }
