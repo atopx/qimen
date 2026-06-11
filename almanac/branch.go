@@ -20,14 +20,9 @@ const (
 	Hai
 )
 
-var branchNames = [12]string{
-	"子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥",
-}
+var branchNames = [12]string{"子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"}
 
-var branchAnimals = [12]string{
-	"鼠", "牛", "虎", "兔", "龙", "蛇",
-	"马", "羊", "猴", "鸡", "狗", "猪",
-}
+var branchAnimals = [12]string{"鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"}
 
 // BranchOf wraps an integer into Branch, normalizing into 0..11.
 func BranchOf(i int) Branch {

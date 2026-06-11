@@ -35,10 +35,7 @@ func (e Element) String() string { return e.Name() }
 // stemElements maps stem index (0..9 = 甲..癸) → Element.
 //
 //	甲乙→木, 丙丁→火, 戊己→土, 庚辛→金, 壬癸→水.
-var stemElements = [10]Element{
-	Wood, Wood, Fire, Fire, Earth,
-	Earth, Metal, Metal, Water, Water,
-}
+var stemElements = [10]Element{Wood, Wood, Fire, Fire, Earth, Earth, Metal, Metal, Water, Water}
 
 // OfStem returns the element of a heavenly stem.
 func OfStem(s almanac.Stem) Element { return stemElements[s.Index()] }
@@ -46,10 +43,7 @@ func OfStem(s almanac.Stem) Element { return stemElements[s.Index()] }
 // branchElements maps branch index (0..11 = 子..亥) → Element.
 //
 //	子=水 丑=土 寅卯=木 辰=土 巳午=火 未=土 申酉=金 戌=土 亥=水.
-var branchElements = [12]Element{
-	Water, Earth, Wood, Wood, Earth, Fire,
-	Fire, Earth, Metal, Metal, Earth, Water,
-}
+var branchElements = [12]Element{Water, Earth, Wood, Wood, Earth, Fire, Fire, Earth, Metal, Metal, Earth, Water}
 
 // OfBranch returns the element of an earthly branch.
 func OfBranch(b almanac.Branch) Element { return branchElements[b.Index()] }
@@ -57,10 +51,7 @@ func OfBranch(b almanac.Branch) Element { return branchElements[b.Index()] }
 // palaceElements maps palace 1..9 → Element. Index 0 reserved.
 //
 //	1坎=水 2坤/5中/8艮=土 3震/4巽=木 6乾/7兑=金 9离=火.
-var palaceElements = [10]Element{
-	Earth,
-	Water, Earth, Wood, Wood, Earth, Metal, Metal, Earth, Fire,
-}
+var palaceElements = [10]Element{Earth, Water, Earth, Wood, Wood, Earth, Metal, Metal, Earth, Fire}
 
 // FromPalace returns the element of a 九宫 palace.
 // Precondition: palace ∈ [1, 9].
@@ -70,18 +61,12 @@ func FromPalace(palace uint8) Element { return palaceElements[palace] }
 //
 //	天蓬=水 天芮/天禽/天任/禽芮=土 天冲/天辅=木
 //	天心/天柱=金 天英=火.
-var starElements = [10]Element{
-	Water, Earth, Wood, Wood, Earth,
-	Metal, Metal, Earth, Fire, Earth,
-}
+var starElements = [10]Element{Water, Earth, Wood, Wood, Earth, Metal, Metal, Earth, Fire, Earth}
 
 // doorElements maps enum.Door (0..7) → Element.
 //
 //	休=水 生/死=土 伤/杜=木 景=火 惊/开=金.
-var doorElements = [8]Element{
-	Water, Earth, Wood, Wood,
-	Fire, Earth, Metal, Metal,
-}
+var doorElements = [8]Element{Water, Earth, Wood, Wood, Fire, Earth, Metal, Metal}
 
 // OfStar returns the 五行 of a 九星.
 func OfStar(s enum.Star) Element { return starElements[s] }
@@ -106,9 +91,7 @@ const (
 	Restrained
 )
 
-var relationNames = [5]string{
-	"比和", "生出", "受生", "克出", "受克",
-}
+var relationNames = [5]string{"比和", "生出", "受生", "克出", "受克"}
 
 // Name returns the Chinese label.
 func (r Relation) Name() string { return relationNames[r] }

@@ -76,9 +76,7 @@ var BranchToPalace = [12]uint8{1, 8, 8, 3, 4, 4, 9, 2, 2, 7, 6, 6}
 // StemTombPalace 天干 (0..9) → 入墓宫位.
 //
 //	甲癸→2, 乙丙戊→6, 丁己庚→8, 辛壬→4.
-var StemTombPalace = [10]uint8{
-	2, 6, 6, 8, 6, 8, 8, 4, 4, 2,
-}
+var StemTombPalace = [10]uint8{2, 6, 6, 8, 6, 8, 8, 4, 4, 2}
 
 // PalaceBranches indexes palace 1..9 → 地支 indices held by that palace.
 // Index 0 and 5 (center) are nil. Slices share package-level backing

@@ -1,7 +1,6 @@
 package almanac
 
 import (
-	"fmt"
 	"iter"
 	"math"
 	"sync"
@@ -21,10 +20,9 @@ func LunarYearOf(year int) LunarYear {
 	return LunarYear{Year: year, LeapMonth: cache.leapMonth}
 }
 
-// Name returns the localized name, e.g. "农历甲辰年".
+// Name returns the localized name, e.g. "甲辰年".
 func (y LunarYear) Name() string {
-	cycle := CycleOf(y.Year - 4)
-	return fmt.Sprintf("农历%s年", cycle.Name())
+	return CycleOf(y.Year - 4).Name()
 }
 
 // String implements fmt.Stringer.

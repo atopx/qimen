@@ -1,6 +1,9 @@
 package almanac
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 // TestJulianDayRoundTrip verifies SolarTime ↔ JulianDay conversion is
 // lossless across a representative range.
@@ -117,5 +120,5 @@ func nearTime(t *testing.T, a, b string, tolSeconds int) bool {
 }
 
 func parseStamp(s string, y, m, d, h, mi, sec *int) (int, error) {
-	return sscanStamp(s, y, m, d, h, mi, sec)
+	return fmt.Sscanf(s, "%d-%d-%d %d:%d:%d", y, m, d, h, mi, sec)
 }

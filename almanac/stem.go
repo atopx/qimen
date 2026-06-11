@@ -18,9 +18,7 @@ const (
 	Gui
 )
 
-var stemNames = [10]string{
-	"甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸",
-}
+var stemNames = [10]string{"甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸"}
 
 // Element index ordering: 0=木, 1=火, 2=土, 3=金, 4=水.
 //

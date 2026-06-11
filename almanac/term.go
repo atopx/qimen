@@ -13,14 +13,10 @@ var ErrUnsupportedTerm = errors.New("almanac: unsupported solar term")
 // termNames lists the 24 solar terms in the canonical 寿星 order, starting
 // from 冬至 (winter solstice). Index 0..23 maps directly to a Term.Index.
 var termNames = [24]string{
-	"冬至", "小寒", "大寒",
-	"立春", "雨水", "惊蛰",
-	"春分", "清明", "谷雨",
-	"立夏", "小满", "芒种",
-	"夏至", "小暑", "大暑",
-	"立秋", "处暑", "白露",
-	"秋分", "寒露", "霜降",
-	"立冬", "小雪", "大雪",
+	"冬至", "小寒", "大寒", "立春", "雨水", "惊蛰",
+	"春分", "清明", "谷雨", "立夏", "小满", "芒种",
+	"夏至", "小暑", "大暑", "立秋", "处暑", "白露",
+	"秋分", "寒露", "霜降", "立冬", "小雪", "大雪",
 }
 
 // Term identifies one of the 24 solar terms keyed by the 寿星 year
