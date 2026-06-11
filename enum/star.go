@@ -20,10 +20,7 @@ const (
 	StarQinRui                // 禽芮 (merged 天禽/天芮 marker)
 )
 
-var starNames = [10]string{
-	"天蓬", "天芮", "天冲", "天辅", "天禽",
-	"天心", "天柱", "天任", "天英", "禽芮",
-}
+var starNames = [10]string{"天蓬", "天芮", "天冲", "天辅", "天禽", "天心", "天柱", "天任", "天英", "禽芮"}
 
 // Name returns the Chinese label.
 func (s Star) Name() string { return starNames[s] }

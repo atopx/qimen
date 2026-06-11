@@ -14,10 +14,7 @@ const (
 	DoorOpen              // 开门
 )
 
-var doorNames = [8]string{
-	"休门", "生门", "伤门", "杜门",
-	"景门", "死门", "惊门", "开门",
-}
+var doorNames = [8]string{"休", "生", "伤", "杜", "景", "死", "惊", "开"}
 
 // Name returns the Chinese label.
 func (d Door) Name() string { return doorNames[d] }

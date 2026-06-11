@@ -1,6 +1,6 @@
 package enum
 
-// Yuan 三元 (上/中/下元), determined by the day pillar.
+// Yuan 三元 (上/中/下), determined by the day pillar.
 type Yuan uint8
 
 const (
@@ -12,7 +12,7 @@ const (
 	YuanLower
 )
 
-var yuanNames = [3]string{"上元", "中元", "下元"}
+var yuanNames = [3]string{"上", "中", "下"}
 
 // Name returns the Chinese label.
 func (y Yuan) Name() string { return yuanNames[y] }

@@ -14,10 +14,7 @@ const (
 	GodJiuTian            // 九天
 )
 
-var godNames = [8]string{
-	"值符", "腾蛇", "太阴", "六合",
-	"白虎", "玄武", "九地", "九天",
-}
+var godNames = [8]string{"值符", "腾蛇", "太阴", "六合", "白虎", "玄武", "九地", "九天"}
 
 // Name returns the Chinese label.
 func (g God) Name() string { return godNames[g] }

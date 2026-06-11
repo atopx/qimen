@@ -11,7 +11,7 @@ const (
 	StyleFly
 )
 
-var styleNames = [3]string{"转盘", "飞盘", "四柱"}
+var styleNames = [2]string{"转盘", "飞盘"}
 
 // Name returns the Chinese label.
 func (s Style) Name() string { return styleNames[s] }
