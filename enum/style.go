@@ -9,8 +9,6 @@ const (
 	StyleRotate Style = iota
 	// StyleFly 飞盘 (reserved for future implementation).
 	StyleFly
-	// StyleSiZhu 四柱 (reserved for future implementation).
-	StyleSiZhu
 )
 
 var styleNames = [3]string{"转盘", "飞盘", "四柱"}
