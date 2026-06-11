@@ -12,7 +12,7 @@ type descriptor struct {
 var registry = [...]descriptor{
 	FanYin:          {"反吟", "奇门凶格。星门反吟,反复无常,事情易变。", auspice.Inauspicious},
 	FuYin:           {"伏吟", "奇门凶格。星门伏吟,事情停滞,宜守不宜进。", auspice.Inauspicious},
-	RuMu:            {"入墓", "奇门凶格。日干或时干入墓,艰难阻塞,难以发展。", auspice.Inauspicious},
+	RuMu:            {"入墓", "奇门凶格。天盘干落入墓库之宫,艰难阻塞,难以发展。", auspice.Inauspicious},
 	KongWang:        {"落空亡", "奇门凶格。落入空亡宫,心愿落空,难以实现。", auspice.Inauspicious},
 	MenPo:           {"门迫", "奇门凶格。门克宫位,门被迫害,谋事不成,阻碍重重。", auspice.Inauspicious},
 	YiQiDeShi:       {"乙奇得使", "奇门吉格。乙奇临开门,利于谋划,贵人相助,诸事吉利。", auspice.Auspicious},

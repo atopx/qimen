@@ -6,15 +6,20 @@ import (
 )
 
 // LunarDay identifies a day within a lunar month.
+//
+// The zero value (Day == 0) is the "not found" sentinel returned by
+// LunarDayOf for instants outside the computable range; Name() and
+// String() return "" for it.
 type LunarDay struct {
 	Month LunarMonth
-	Day   uint8 // 1..30
+	Day   uint8 // 1..30; 0 = invalid/unresolved
 }
 
 // LunarDayOf maps a solar instant to its lunar date.
 //
 // Resolution: solar instant → noon-JD-of-its-day → 朔 ≤ noon-JD → containing
-// lunar month → day offset.
+// lunar month → day offset. Returns the zero LunarDay when the instant
+// cannot be located (astronomical tables out of range).
 func LunarDayOf(s SolarTime) LunarDay {
 	// Solar day at noon
 	jd := julianDayFromYmdhms(int(s.Year), int(s.Month), int(s.Day), 12, 0, 0)
@@ -74,18 +79,24 @@ func (d LunarDay) Cycle() Cycle {
 	if s == (SolarTime{}) {
 		return CycleOf(0)
 	}
-	noonJD := julianDayFromYmdhms(int(s.Year), int(s.Month), int(s.Day), 12, 0, 0)
-	idx := int(math.Floor(noonJD+0.5)) - 2451551
-	return CycleOf(idx)
+	return dayCycleAtNoon(int(s.Year), int(s.Month), int(s.Day))
 }
 
-// Name returns the day's Chinese name (e.g. "初一", "十五", "廿三").
+// Name returns the day's Chinese name (e.g. "初一", "十五", "廿三"),
+// or "" for the zero (unresolved) LunarDay.
 func (d LunarDay) Name() string {
+	if d.Day == 0 {
+		return ""
+	}
 	return lunarDayNames[d.Day-1]
 }
 
-// String returns "<year><month><day>", e.g. "农历甲辰年正月初一".
+// String returns "<year><month><day>", e.g. "农历甲辰年正月初一",
+// or "" for the zero (unresolved) LunarDay.
 func (d LunarDay) String() string {
+	if d.Day == 0 {
+		return ""
+	}
 	return fmt.Sprintf("%s%s%s", d.Month.Year.Name(), d.Month.Name(), d.Name())
 }
 

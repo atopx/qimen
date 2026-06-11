@@ -22,13 +22,7 @@ func (t Terrain) Index() int { return t.Inner.Index() }
 func (t Terrain) Name() string { return t.Inner.Name() }
 
 // Summary returns a one-line classical description.
-func (t Terrain) Summary() string {
-	i := t.Index()
-	if i < 0 || i >= len(summaries) {
-		return ""
-	}
-	return summaries[i]
-}
+func (t Terrain) Summary() string { return summaries[t.Index()] }
 
 // Auspice returns the literature-defined auspice level.
 //
@@ -37,13 +31,7 @@ func (t Terrain) Summary() string {
 //   - 沐浴 / 衰 / 胎 → 中和
 //   - 病 / 墓 → 凶
 //   - 死 / 绝 → 大凶
-func (t Terrain) Auspice() auspice.Auspice {
-	i := t.Index()
-	if i < 0 || i >= len(auspices) {
-		return auspice.Neutral
-	}
-	return auspices[i]
-}
+func (t Terrain) Auspice() auspice.Auspice { return auspices[t.Index()] }
 
 // String implements fmt.Stringer.
 func (t Terrain) String() string { return t.Name() }

@@ -44,10 +44,11 @@ func TestEntryPointsAgree(t *testing.T) {
 }
 
 // TestSelfPalaceJiaDay covers the 甲 → 值符原宫 fallback path.
+// 2025-05-05 is a 甲戌 day, so the day stem is 甲 by construction.
 func TestSelfPalaceJiaDay(t *testing.T) {
 	c := MustFrom(solarTime(t, 2025, 5, 5, 5, 5, 0))
-	if c.Day().Stem().Name() != "甲" {
-		t.Skip("not a jia day")
+	if got := c.Day().Stem(); got != almanac.Jia {
+		t.Fatalf("fixture day stem: got %s, want 甲", got.Name())
 	}
 	if got, want := c.SelfPalace(), c.ZhiFu().OriginalPalace; got != want {
 		t.Errorf("self palace on jia day: got %d, want %d", got, want)
@@ -75,6 +76,22 @@ func TestUnsupportedStyle(t *testing.T) {
 	}
 	if !errors.Is(err, ErrUnsupportedStyle) {
 		t.Errorf("err: got %v, want wrapping ErrUnsupportedStyle", err)
+	}
+}
+
+// TestInvalidTimeErrorChain verifies invalid-time errors from the chart
+// entry points match the sentinel under both its qimen and almanac
+// names (ErrInvalidTime aliases almanac.ErrInvalidTime).
+func TestInvalidTimeErrorChain(t *testing.T) {
+	_, err := FromTime(time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC))
+	if err == nil {
+		t.Fatal("expected error for year 10000")
+	}
+	if !errors.Is(err, ErrInvalidTime) {
+		t.Errorf("err %v: want wrapping qimen.ErrInvalidTime", err)
+	}
+	if !errors.Is(err, almanac.ErrInvalidTime) {
+		t.Errorf("err %v: want wrapping almanac.ErrInvalidTime", err)
 	}
 }
 

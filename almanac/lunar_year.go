@@ -93,167 +93,143 @@ func lunarYearCache(year int) *lunarYearInfo {
 	return info
 }
 
-// computeLunarYearInfo derives leap-month + month-start days for a year.
-//
-// Algorithm (GB/T 33661-2017):
-//  1. Find 冬至 of year-1 (prevDZ) and 冬至 of year (currDZ).
-//  2. Walk forward through 朔's starting before prevDZ until we have at least
-//     16 朔's and cover ~60 days past currDZ — guarantees enough span for
-//     up to 13 months of lunar year y plus a buffer.
-//  3. The month containing prevDZ is "11月 of (y-1)"; the month containing
-//     currDZ is "11月 of y". Months between them: 12 (normal) or 13 (leap).
-//  4. If leap, the first month between the two 11月's that contains no 中气
-//     (even-indexed solar term) is the leap month; it takes the previous
-//     month's number.
-//  5. 正月 of y is the 3rd 朔 after 11月 of (y-1), or 4th if leap fell before it.
-func computeLunarYearInfo(year int) *lunarYearInfo {
-	// TermOf(year, 0) returns the 冬至 in calendar year (year-1),
-	// because the canonical 寿星 cycle starts at 冬至 which physically
-	// occurs at the end of the prior calendar year. So:
-	//   - 冬至 in calendar year (year-1) → TermOf(year, 0)
-	//   - 冬至 in calendar year (year)   → TermOf(year+1, 0)
-	prevDZ := math.Floor(TermOf(year, 0).JulianDay() + 0.5)
-	currDZ := math.Floor(TermOf(year+1, 0).JulianDay() + 0.5)
+// windowMonth is one lunar month inside a solstice-to-solstice window:
+// its first-day JD (noon-floored, absolute), month number and leap flag.
+type windowMonth struct {
+	firstJD int64
+	num     uint8
+	leap    bool
+}
 
-	// Collect ~18 朔's starting before prevDZ.
-	shuos := []float64{calcShuo(prevDZ - j2000 - 30)}
-	for len(shuos) < 18 || shuos[len(shuos)-1]+j2000 < currDZ+90 {
-		nextProbe := shuos[len(shuos)-1] + 30
-		next := calcShuo(nextProbe)
-		if next <= shuos[len(shuos)-1]+1 {
-			// guard against numerical stagnation
-			next = shuos[len(shuos)-1] + 29.5306
+// solsticeWindow resolves the lunar months of one 岁实 window
+// [冬至(cycle year Y), 冬至(cycle year Y+1)) per GB/T 33661-2017:
+//
+//  1. The month containing a 冬至 is always 十一月, so the window opens
+//     at 十一月 and closes right before the next 十一月.
+//  2. The window spans 12 朔望月 (no leap) or 13 (leap). In a leap
+//     window, the first month without a 中气 (even-indexed term) is the
+//     leap month and takes the previous month's number.
+//  3. Month numbers run 11, 12, 1, 2, ... 10 (leap variants interleaved).
+//
+// The trailing sentinel 朔 (start of the next window's 十一月) is NOT
+// included; callers needing the last month's length peek at the next
+// window.
+func solsticeWindow(year int) []windowMonth {
+	dz1 := math.Floor(TermOf(year, 0).JulianDay() + 0.5)
+	dz2 := math.Floor(TermOf(year+1, 0).JulianDay() + 0.5)
+
+	// calcShuo(p) returns the new moon within ±15 days of probe p, so a
+	// p+35 probe advances exactly one lunation. Seed strictly before dz1,
+	// then walk forward to the 朔 opening the month that contains dz1.
+	seed := calcShuo(dz1 - j2000 - 30)
+	for {
+		next := calcShuo(seed + 35)
+		if next+j2000 > dz1 {
+			break
+		}
+		seed = next
+	}
+
+	// 朔 sequence: month containing dz1 through the month containing dz2
+	// (the latter is the next window's 十一月 and acts as the sentinel).
+	shuos := []float64{seed}
+	for len(shuos) < 16 {
+		next := calcShuo(shuos[len(shuos)-1] + 35)
+		if next+j2000 > dz2 {
+			break
 		}
 		shuos = append(shuos, next)
-		if len(shuos) > 30 {
-			break
+	}
+	monthCount := len(shuos) - 1 // 12 or 13
+	if monthCount < 12 {
+		return nil // astronomical tables out of range
+	}
+
+	// Leap detection: first month in the window without a 中气.
+	// The window's 中气 are exactly TermOf(year, 0/2/../22) plus dz2.
+	leapIdx := -1
+	if monthCount == 13 {
+		zq := make([]float64, 0, 13)
+		for i := 0; i <= 22; i += 2 {
+			zq = append(zq, math.Floor(TermOf(year, i).JulianDay()+0.5))
 		}
-	}
-
-	// Index of 朔 that opens the lunar month containing prevDZ.
-	month11Idx := -1
-	for i := 0; i+1 < len(shuos); i++ {
-		if shuos[i]+j2000 <= prevDZ && shuos[i+1]+j2000 > prevDZ {
-			month11Idx = i
-			break
-		}
-	}
-	if month11Idx < 0 {
-		return &lunarYearInfo{leapMonth: 0}
-	}
-
-	// Index of 朔 that opens the lunar month containing currDZ.
-	month11NextIdx := -1
-	for i := month11Idx + 1; i+1 < len(shuos); i++ {
-		if shuos[i]+j2000 <= currDZ && shuos[i+1]+j2000 > currDZ {
-			month11NextIdx = i
-			break
-		}
-	}
-	if month11NextIdx < 0 {
-		return &lunarYearInfo{leapMonth: 0}
-	}
-
-	span := month11NextIdx - month11Idx
-	hasLeap := span == 13
-
-	// Find leap month: first month in (month11Idx, month11NextIdx] with no 中气.
-	leapShuoIdx := -1
-	if hasLeap {
-		zhongqiJDs := collectZhongqi(prevDZ, currDZ+30)
-		for i := month11Idx + 1; i <= month11NextIdx; i++ {
-			start := shuos[i] + j2000
-			end := shuos[i+1] + j2000
+		zq = append(zq, dz2)
+		for i := 0; i < monthCount; i++ {
+			start := math.Floor(shuos[i] + j2000 + 0.5)
+			end := math.Floor(shuos[i+1] + j2000 + 0.5)
 			hasZQ := false
-			for _, z := range zhongqiJDs {
+			for _, z := range zq {
 				if z >= start && z < end {
 					hasZQ = true
 					break
 				}
 			}
 			if !hasZQ {
-				leapShuoIdx = i
+				leapIdx = i
 				break
 			}
 		}
 	}
 
-	// 正月 starts at month11Idx + 2 (or +3 if leap is between).
-	zhengyueIdx := month11Idx + 2
-	if hasLeap && leapShuoIdx > month11Idx && leapShuoIdx <= zhengyueIdx {
-		zhengyueIdx = month11Idx + 3
+	months := make([]windowMonth, monthCount)
+	num := uint8(10) // pre-increments to 11 for the first month
+	for i := 0; i < monthCount; i++ {
+		leap := i == leapIdx
+		if !leap {
+			if num == 12 {
+				num = 1
+			} else {
+				num++
+			}
+		}
+		months[i] = windowMonth{
+			firstJD: int64(math.Floor(shuos[i] + j2000 + 0.5)),
+			num:     num,
+			leap:    leap,
+		}
+	}
+	return months
+}
+
+// computeLunarYearInfo assembles lunar year `year` (正月..十二月 plus a
+// possible leap month) from the two solstice windows it straddles:
+//
+//   - window A = [冬至(year-1), 冬至(year)) supplies 正月..十月 of `year`
+//     (months numbered 1..10 there belong to this year by construction);
+//   - window B = [冬至(year), 冬至(year+1)) supplies 十一月 and 十二月
+//     of `year` (months numbered 11..12 there, including 闰十一月 /
+//     闰十二月 — the placement window A alone can never see).
+func computeLunarYearInfo(year int) *lunarYearInfo {
+	a := solsticeWindow(year)
+	b := solsticeWindow(year + 1)
+	if a == nil || b == nil {
+		return &lunarYearInfo{}
 	}
 
-	monthCount := 12
-	leapMonth := uint8(0)
-	if hasLeap && leapShuoIdx >= zhengyueIdx && leapShuoIdx < zhengyueIdx+13 {
-		var n uint8 = 0
-		for i := zhengyueIdx; i < leapShuoIdx; i++ {
-			n++
+	months := make([]windowMonth, 0, 13)
+	for _, m := range a {
+		if m.num >= 1 && m.num <= 10 {
+			months = append(months, m)
 		}
-		leapMonth = n
-		monthCount = 13
 	}
-
-	// Bounds check: ensure shuos has zhengyueIdx + monthCount entries.
-	if zhengyueIdx+monthCount > len(shuos) {
-		// Truncate to what we have
-		monthCount = len(shuos) - zhengyueIdx
-		if monthCount < 12 {
-			monthCount = 12
-		}
-		if zhengyueIdx+monthCount > len(shuos) {
-			return &lunarYearInfo{leapMonth: 0}
+	for _, m := range b {
+		if m.num == 11 || m.num == 12 {
+			months = append(months, m)
 		}
 	}
 
 	info := &lunarYearInfo{
-		leapMonth:    leapMonth,
-		firstDays:    make([]int64, monthCount),
-		monthNumbers: make([]uint8, monthCount),
-		leapMask:     make([]bool, monthCount),
+		firstDays:    make([]int64, len(months)),
+		monthNumbers: make([]uint8, len(months)),
+		leapMask:     make([]bool, len(months)),
 	}
-
-	if hasLeap && leapMonth > 0 {
-		var monthNum uint8 = 0
-		for out := 0; out < monthCount; out++ {
-			i := zhengyueIdx + out
-			info.firstDays[out] = int64(math.Floor(shuos[i] + j2000 + 0.5))
-			if i == leapShuoIdx {
-				info.monthNumbers[out] = monthNum
-				info.leapMask[out] = true
-			} else {
-				monthNum++
-				info.monthNumbers[out] = monthNum
-				info.leapMask[out] = false
-			}
-		}
-	} else {
-		for i := 0; i < monthCount; i++ {
-			info.firstDays[i] = int64(math.Floor(shuos[zhengyueIdx+i] + j2000 + 0.5))
-			info.monthNumbers[i] = uint8(i + 1)
+	for i, m := range months {
+		info.firstDays[i] = m.firstJD
+		info.monthNumbers[i] = m.num
+		info.leapMask[i] = m.leap
+		if m.leap {
+			info.leapMonth = m.num
 		}
 	}
-
 	return info
-}
-
-// collectZhongqi returns JD-floor of the 12 中气 (even-indexed terms)
-// whose absolute JD falls in [start, end].
-func collectZhongqi(start, end float64) []float64 {
-	var out []float64
-	// start/end are absolute JDs; convert to year estimate via J2000 anchor.
-	startYear := int(math.Floor((start-j2000)/365.25 + 2000))
-	endYear := int(math.Floor((end-j2000)/365.25 + 2000))
-	// Sweep one extra year on each side to be safe (TermOf year convention
-	// places 冬至 of calendar Y at TermOf(Y+1, 0)).
-	for y := startYear - 1; y <= endYear+2; y++ {
-		for i := 0; i < 24; i += 2 {
-			jd := math.Floor(TermOf(y, i).JulianDay() + 0.5)
-			if jd >= start && jd <= end {
-				out = append(out, jd)
-			}
-		}
-	}
-	return out
 }

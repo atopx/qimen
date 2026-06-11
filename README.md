@@ -23,11 +23,11 @@ import (
 
 func main() {
     // 4 种构造入口任选其一
-    chart := qimen.New()  // 当前时刻
+    chart := qimen.New()  // 当前时刻 (UTC+8), 默认配置, 不会失败
     st, _ := almanac.SolarTimeOf(2026, 1, 14, 18, 45, 0) // 指定时刻
     chart, _  = qimen.From(st) // 内部 SolarTime
-    chart, _  = qimen.FromTime(time.Now()) // 标准库 time.Time
-    chart, _  = qimen.FromTimestamp(1768376700) // Unix 秒
+    chart, _  = qimen.FromTime(time.Now()) // 标准库 time.Time, 取其挂钟时间
+    chart, _  = qimen.FromTimestamp(1768376700) // Unix 秒, 按 UTC+8 解释
 
     fmt.Printf("节气: %s\n", chart.Term().Name())
     fmt.Printf("局数: %s遁%d局 %s\n", chart.YinYang().Name(), chart.Ju(), chart.Yuan().Name())
@@ -66,6 +66,22 @@ if errors.Is(err, qimen.ErrUnsupportedMethod) { /* ... */ }
 if errors.Is(err, qimen.ErrUnsupportedStyle)  { /* ... */ }
 ```
 
+### 时区语义
+
+起局使用事件发生地的挂钟时间 (民用时):
+
+- `FromTime(t)` 直接取 `t` 的挂钟时间, **不做时区换算**;
+- `FromTimestamp(unix)` 与 `New()` 按 UTC+8 (中国标准时间) 解释;
+- 其他时区先显式转换: `qimen.FromTime(time.Unix(unix, 0).In(loc))`。
+
+### 排盘约定
+
+流派分歧点的取舍如下 (时家转盘主流做法):
+
+- 三元由日柱直推 (`index mod 15`), 不做拆补/置闰;
+- 日柱 23 点换日 (晚子时归次日);
+- 天盘中宫干原位保留, 坤二宫不另显寄宫双干。
+
 ## 顶层 `*Chart` API
 
 | 方法                                                     | 返回                               | 说明                                |
@@ -78,7 +94,7 @@ if errors.Is(err, qimen.ErrUnsupportedStyle)  { /* ... */ }
 | `Ju()`                                                   | `uint8`                            | 局数 (1..=9)                        |
 | `Yuan()`                                                 | `enum.Yuan`                        | 三元                                |
 | `XunShou()`                                              | `almanac.Stem`                     | 旬首天干                            |
-| `ZhiFu()`                                                | `qimen.Duty`                       | 值符 (星 + 原宫 + 落宫)             |
+| `ZhiFu()`                                                | `qimen.DutyStar`                   | 值符 (星 + 原宫 + 落宫)             |
 | `ZhiShi()`                                               | `qimen.DutyDoor`                   | 值使 (门 + 原宫 + 落宫)             |
 | `KongWang()`                                             | `[2]almanac.Branch`                | 旬空亡两支                          |
 | `Palace(n)`                                              | `*palace.Palace`                   | 按宫号取宫 (越界 nil)               |
@@ -92,7 +108,7 @@ if errors.Is(err, qimen.ErrUnsupportedStyle)  { /* ... */ }
 ## 单宫 `*palace.Palace`
 
 - 基础: `Number`, `Name`, `Direction`, `Branches`
-- 盘面: `EarthStem`, `SanQiLiuYi`, `HeavenStem`, `HiddenStem`
+- 盘面: `EarthStem` (三奇六仪), `HeavenStem`, `HiddenStem`
 - 三盘 (中宫 5 多为未设): `(Star, StarSet)`, `(Door, DoorSet)`, `(God, GodSet)`
 - 衍生: `(TenStar, TenStarSet)`, `(Terrain, TerrainSet)`, `(Hexagram, HexagramSet)`
 - 聚合: `Patterns`, `ShenSha`
@@ -110,8 +126,8 @@ if errors.Is(err, qimen.ErrUnsupportedStyle)  { /* ... */ }
 | `hexagram` | `Trigram` 八卦 + `Hexagram` 六十四卦 + auspice                          |
 | `plate`    | 泛型 `Plate[T]` + 六盘构造器 (`BuildEarth/Heaven/Star/Door/God/Hidden`) |
 | `palace`   | `Palace` 单宫数据载体                                                   |
-| `pattern`  | 二十四格局检测 (`Detect → iter.Seq[Pattern]`)                           |
-| `shensha`  | 十种神煞检测 (`Detect → iter.Seq[ShenSha]`)                             |
+| `pattern`  | 二十四格局检测 (`AppendAll` / `Detect → iter.Seq[Pattern]`)             |
+| `shensha`  | 十种神煞检测 (`AppendAll` / `Detect → iter.Seq[ShenSha]`)               |
 
 ## 覆盖能力
 

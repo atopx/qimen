@@ -16,13 +16,18 @@ func StepPalace(palace uint8, yy almanac.YinYang) uint8 {
 	return palace - 1
 }
 
-// MoveBy steps n times in 阴/阳 遁 order. If the destination is center
+// MoveBy steps n times in 阴/阳 遁 order (forward for 阳, backward for
+// 阴, both through the full 1..9 ring). If the destination is center
 // (palace 5), it is reassigned to 2 (坤 fallback per qimen tradition).
+// Precondition: palace ∈ [1, 9], steps ≥ 0.
 func MoveBy(palace uint8, steps int, yy almanac.YinYang) uint8 {
-	target := palace
-	for i := 0; i < steps; i++ {
-		target = StepPalace(target, yy)
+	var idx int
+	if yy == almanac.Yang {
+		idx = (int(palace) - 1 + steps) % 9
+	} else {
+		idx = (int(palace)-1-steps)%9 + 9
 	}
+	target := uint8(idx%9 + 1)
 	if target == 5 {
 		return 2
 	}

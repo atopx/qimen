@@ -11,8 +11,8 @@
 //   - 八门 (DoorPlate)
 //   - 九神 (GodPlate)
 //
-// The builders take an `enum.Style` parameter so future implementations
-// of StyleFly can dispatch internally without changing call sites.
+// The builders assume StyleRotate (转盘) semantics; style validation is
+// a Chart-entry-point concern.
 package plate
 
 import (
@@ -21,14 +21,13 @@ import (
 )
 
 // Plate is a generic 9-cell plate keyed by palace number (1..9).
-// Unset cells return the zero value of T with ok=false.
+// The zero value is an empty plate, ready to use; unset cells return
+// the zero value of T with ok=false. Plates are small value types —
+// builders return them by value so charts can keep them on the stack.
 type Plate[T any] struct {
 	cells [9]T
 	set   [9]bool
 }
-
-// New returns an empty plate.
-func New[T any]() *Plate[T] { return &Plate[T]{} }
 
 // Set stores v in palace n. Precondition: n ∈ [1, 9].
 //
@@ -50,17 +49,6 @@ func (p *Plate[T]) Get(palace uint8) (T, bool) {
 		return zero, false
 	}
 	return p.cells[palace-1], true
-}
-
-// MustGet returns the value at palace, falling back to a zero value if unset.
-//
-// Useful for hot paths where the cell is known to be set.
-func (p *Plate[T]) MustGet(palace uint8) T {
-	var zero T
-	if palace < 1 || palace > 9 || !p.set[palace-1] {
-		return zero
-	}
-	return p.cells[palace-1]
 }
 
 // Type aliases for the four concrete plate flavors.

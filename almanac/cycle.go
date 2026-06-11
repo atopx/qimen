@@ -50,6 +50,3 @@ func (c Cycle) EmptyBranches() [2]Branch {
 	first := BranchOf(10 + int(c.Branch()) - int(c.Stem()))
 	return [2]Branch{first, first.Next(1)}
 }
-
-// Next advances a Branch by n (Branch helper used by EmptyBranches).
-func (b Branch) Next(n int) Branch { return BranchOf(int(b) + n) }

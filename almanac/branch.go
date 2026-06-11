@@ -24,10 +24,6 @@ var branchNames = [12]string{
 	"子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥",
 }
 
-// branchElement five-element index per branch (0=木..4=水):
-// 子=水, 丑=土, 寅卯=木, 辰=土, 巳午=火, 未=土, 申酉=金, 戌=土, 亥=水.
-var branchElement = [12]uint8{4, 2, 0, 0, 2, 1, 1, 2, 3, 3, 2, 4}
-
 var branchAnimals = [12]string{
 	"鼠", "牛", "虎", "兔", "龙", "蛇",
 	"马", "羊", "猴", "鸡", "狗", "猪",
@@ -48,8 +44,8 @@ func (b Branch) Name() string { return branchNames[b] }
 // String implements fmt.Stringer.
 func (b Branch) String() string { return b.Name() }
 
-// Element returns the five-element index (0=木..4=水).
-func (b Branch) Element() int { return int(branchElement[b]) }
+// Next returns the branch advanced by n steps (negative goes backward).
+func (b Branch) Next(n int) Branch { return BranchOf(int(b) + n) }
 
 // Animal returns the Chinese zodiac animal name.
 func (b Branch) Animal() string { return branchAnimals[b] }

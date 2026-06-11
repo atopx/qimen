@@ -62,6 +62,39 @@ func TestTermBoundary(t *testing.T) {
 	}
 }
 
+// TestTermIndexWrap verifies (year, index) normalization uses floor
+// division so negative inputs (including BCE years) wrap consistently.
+// The invariant: TermOf(y, i) depends only on y*24 + i.
+func TestTermIndexWrap(t *testing.T) {
+	cases := []struct {
+		year, index         int
+		wantYear, wantIndex int
+	}{
+		{2025, -1, 2024, 23},
+		{2025, 24, 2026, 0},
+		{2025, 25, 2026, 1},
+		{-100, -1, -101, 23},
+		{-100, 24, -99, 0},
+		{-1, -25, -3, 23},
+	}
+	for _, c := range cases {
+		got := TermOf(c.year, c.index)
+		if got.Year() != c.wantYear || got.Index() != c.wantIndex {
+			t.Errorf("TermOf(%d, %d): got (%d, %d), want (%d, %d)",
+				c.year, c.index, got.Year(), got.Index(), c.wantYear, c.wantIndex)
+		}
+	}
+	// Next must agree with direct construction across the wrap.
+	for _, year := range []int{2025, -100} {
+		prev := TermOf(year, 0).Next(-1)
+		want := TermOf(year, -1)
+		if prev.Year() != want.Year() || prev.Index() != want.Index() {
+			t.Errorf("TermOf(%d,0).Next(-1) = (%d,%d), want (%d,%d)",
+				year, prev.Year(), prev.Index(), want.Year(), want.Index())
+		}
+	}
+}
+
 // nearTime parses two "YYYY-MM-DD HH:MM:SS" strings and reports whether
 // they are within tolSeconds of each other.
 func nearTime(t *testing.T, a, b string, tolSeconds int) bool {

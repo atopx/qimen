@@ -2,6 +2,10 @@ package almanac
 
 import "math"
 
+// jdJiaZiDayAnchor is the noon Julian Day of 2000-01-07 UT — a 甲子 day
+// (j2000 + 6). Day-pillar cycles are counted from this anchor.
+const jdJiaZiDayAnchor = j2000 + 6
+
 // Pillars holds the four sexagenary pillars (year/month/day/hour)
 // derived from a solar instant using term-direct rules:
 //
@@ -17,68 +21,68 @@ type Pillars struct {
 }
 
 // PillarsOf computes the four pillars for a solar instant.
-func PillarsOf(s SolarTime) Pillars {
-	yearCycle := yearPillar(s)
+func PillarsOf(s SolarTime) Pillars { return PillarsAt(s, TermOfSolarTime(s)) }
+
+// PillarsAt computes the four pillars for a solar instant whose current
+// solar term is already known. Precondition: term == s.Term(). Callers
+// that already resolved the term (e.g. chart construction) avoid a
+// second term lookup this way.
+func PillarsAt(s SolarTime, term Term) Pillars {
+	yearCycle := yearPillar(term)
 	dayCycle := dayPillar(s)
-	monthCycle := monthPillar(s, yearCycle)
-	hourCycle := hourPillarFromDay(s, dayCycle)
 	return Pillars{
 		Year:  yearCycle,
-		Month: monthCycle,
+		Month: monthPillar(term, yearCycle),
 		Day:   dayCycle,
-		Hour:  hourCycle,
+		Hour:  hourPillarFromDay(s, dayCycle),
 	}
 }
 
-// Pillars returns the cached pillars for s. Convenience wrapper.
+// Pillars returns the four pillars for s. Convenience wrapper.
 func (s SolarTime) Pillars() Pillars { return PillarsOf(s) }
 
 // Term returns the current solar term for s.
 func (s SolarTime) Term() Term { return TermOfSolarTime(s) }
 
-// yearPillar uses 立春 (term index 3) as the year boundary.
-// Year is (Y - 4) mod 60 for instants ≥ 立春 of Y, else (Y - 5) mod 60.
-func yearPillar(s SolarTime) Cycle {
-	y := int(s.Year)
-	lichun := TermOf(y, 3).SolarTime()
-	if s.Before(lichun) {
+// yearPillar uses 立春 (term index 3) as the year boundary, derived
+// directly from the current term: terms 冬至/小寒/大寒 (index < 3) of
+// cycle year Y lie before 立春, so the pillar year is Y-1; from 立春
+// onward it is Y. Pillar cycle is (year - 4) mod 60 (甲子 = AD 4).
+func yearPillar(term Term) Cycle {
+	y := term.Year()
+	if term.Index() < 3 {
 		y--
 	}
 	return CycleOf(y - 4)
 }
 
 // monthPillar uses 节气-based month boundaries (节 = odd-index terms).
-// Month sequence starts at 寅 (after 立春). 五虎遁: month stem of 寅月 =
-// (year_stem * 2 + 2) mod 10, hence sixty-cycle index at seq 0 =
-// ((year_stem mod 5) * 12 + 2) mod 60. Each subsequent month adds 1.
-func monthPillar(s SolarTime, year Cycle) Cycle {
-	// Determine month sequence: 0 = 寅月 (从立春起), 1 = 卯月 (从惊蛰起),
-	// ..., 11 = 丑月 (从小寒起).
-	seq := monthSequence(s)
+// Month sequence starts at 寅 (after 立春): each pair of adjacent terms
+// (one 节 + one 气) is one month, so seq = ((termIdx - 3 + 24) % 24) / 2.
+// 五虎遁: month stem of 寅月 = (year_stem * 2 + 2) mod 10, hence the
+// sixty-cycle index at seq 0 = ((year_stem mod 5) * 12 + 2) mod 60.
+func monthPillar(term Term, year Cycle) Cycle {
+	seq := ((term.Index() - 3 + 24) % 24) / 2
 	yearStem := int(year.Stem())
 	idx0 := ((yearStem%5)*12 + 2) % 60
 	return CycleOf(idx0 + seq)
 }
 
-// monthSequence returns the 0..11 月柱 offset since 寅月.
-//
-// Derived in O(1) from the current solar term: each pair of adjacent
-// terms (one 节 + one 气) is exactly one month, with 寅月 starting at
-// 立春 (term index 3). So seq = ((termIdx - 3 + 24) % 24) / 2.
-func monthSequence(s SolarTime) int {
-	t := TermOfSolarTime(s)
-	return ((t.Index() - 3 + 24) % 24) / 2
+// dayCycleAtNoon returns the day-pillar cycle for the calendar day
+// containing the given date (anchored at jdJiaZiDayAnchor).
+func dayCycleAtNoon(year, month, day int) Cycle {
+	noonJD := julianDayFromYmdhms(year, month, day, 12, 0, 0)
+	return CycleOf(int(math.Floor(noonJD+0.5)) - jdJiaZiDayAnchor)
 }
 
-// dayPillar uses JD 2451551 (2000-01-07 noon UT) as 甲子日 anchor.
-// Hour 23 rolls to next day.
+// dayPillar derives the day pillar; hour 23 rolls to the next day
+// (晚子时 convention: the day switches at 23:00).
 func dayPillar(s SolarTime) Cycle {
-	noonJD := julianDayFromYmdhms(int(s.Year), int(s.Month), int(s.Day), 12, 0, 0)
-	idx := int(math.Floor(noonJD+0.5)) - 2451551
+	c := dayCycleAtNoon(int(s.Year), int(s.Month), int(s.Day))
 	if s.Hour == 23 {
-		idx++
+		return c.Next(1)
 	}
-	return CycleOf(idx)
+	return c
 }
 
 // hourPillarFromDay derives the hour pillar from the day pillar.

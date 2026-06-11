@@ -7,33 +7,10 @@
 package compute
 
 import (
-	"errors"
-
 	"github.com/atopx/qimen/almanac"
 	"github.com/atopx/qimen/enum"
 	"github.com/atopx/qimen/internal/tables"
 )
-
-// ErrUnsupportedMethod is returned when a caller asks Chart to use a
-// Method that is not yet implemented (MethodDay/Month/Year reserved).
-//
-// This is a Chart-level concern; compute primitives never validate it.
-var ErrUnsupportedMethod = errors.New("qimen: unsupported method")
-
-// YinYang returns the 阴/阳 遁 polarity for a solar instant.
-//
-//	冬至 ≤ t < 夏至 → 阳遁
-//	夏至 ≤ t < 次冬至 → 阴遁
-func YinYang(st almanac.SolarTime) almanac.YinYang {
-	year := int(st.Year)
-	winter := almanac.TermOf(year, 0).SolarTime()
-	summer := almanac.TermOf(year, 12).SolarTime()
-	nextWinter := almanac.TermOf(year+1, 0).SolarTime()
-	if (!st.Before(winter) && st.Before(summer)) || !st.Before(nextWinter) {
-		return almanac.Yang
-	}
-	return almanac.Yin
-}
 
 // Yuan returns the 三元 segment for a given day pillar.
 // Index mod 15 lands in [0..4]→上元, [5..9]→中元, [10..14]→下元.
@@ -59,15 +36,6 @@ func Ju(term almanac.Term, yuan enum.Yuan) uint8 {
 // hour.Ten() is always 0..5 by construction.
 func XunShou(hour almanac.Cycle) almanac.Stem {
 	return almanac.StemOf(int(tables.TenXunShou[hour.Ten().Index()]))
-}
-
-// KongWang returns the 旬空亡 branch pair for the hour pillar.
-func KongWang(hour almanac.Cycle) [2]almanac.Branch {
-	pair := tables.TenKongBranches[hour.Ten().Index()]
-	return [2]almanac.Branch{
-		almanac.BranchOf(int(pair[0])),
-		almanac.BranchOf(int(pair[1])),
-	}
 }
 
 // palaceBranchesCache holds the precomputed []almanac.Branch slices for

@@ -152,9 +152,9 @@ func printPalace(p *palace.Palace) {
 	godName, tenStarName, terrainText, hexaText := "空", "空", "空", "空"
 	if !p.IsCenter() {
 		starName = p.Star.Name()
-		starEl = element.OfStar(int(p.Star)).Name()
+		starEl = element.OfStar(p.Star).Name()
 		doorName = p.Door.Name()
-		doorEl = element.OfDoor(int(p.Door)).Name()
+		doorEl = element.OfDoor(p.Door).Name()
 		godName = p.God.Name()
 		tenStarName = p.TenStar.Name()
 		terrainText = fmt.Sprintf("%s[%s]", p.Terrain.Name(), p.Terrain.Auspice().Name())
@@ -169,7 +169,7 @@ func printPalace(p *palace.Palace) {
 		"  %d宫%s(%s/%s) 地支:%s 地盘:%s 天盘:%s 暗干:%s 九星:%s(%s) 八门:%s(%s) 八神:%s 十神:%s 长生:%s\n",
 		p.Number, p.Name, p.Direction.Name(), p.Element().Name(),
 		branchText.String(),
-		p.SanQiLiuYi.Name(), p.HeavenStem.Name(), p.HiddenStem.Name(),
+		p.EarthStem.Name(), p.HeavenStem.Name(), p.HiddenStem.Name(),
 		starName, starEl,
 		doorName, doorEl,
 		godName, tenStarName, terrainText,

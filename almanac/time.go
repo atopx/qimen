@@ -9,6 +9,10 @@ import (
 // ErrInvalidTime indicates an out-of-range or otherwise invalid SolarTime input.
 var ErrInvalidTime = errors.New("almanac: invalid solar time")
 
+// locCST is the canonical China Standard Time zone (UTC+8) used by all
+// entry points that must interpret an absolute instant as a wall clock.
+var locCST = time.FixedZone("CST", 8*3600)
+
 // SolarTime is an immutable solar (Gregorian) instant at second precision.
 // All fields are exported for ergonomic field access; the type is treated as
 // a value (copied freely, never mutated in place).
@@ -34,17 +38,17 @@ func SolarTimeFromTime(t time.Time) (SolarTime, error) {
 	return newSolarTime(y, int(mo), d, h, mi, s)
 }
 
-// SolarTimeFromUnix interprets a Unix-seconds timestamp in the canonical
-// East-Asia 8 timezone and returns the corresponding SolarTime.
+// SolarTimeFromUnix interprets a Unix-seconds timestamp as a UTC+8
+// (China Standard Time) wall clock and returns the corresponding
+// SolarTime. For other zones convert explicitly:
+// SolarTimeFromTime(time.Unix(unix, 0).In(loc)).
 func SolarTimeFromUnix(unix int64) (SolarTime, error) {
-	loc := time.FixedZone("CST", 8*3600)
-	return SolarTimeFromTime(time.Unix(unix, 0).In(loc))
+	return SolarTimeFromTime(time.Unix(unix, 0).In(locCST))
 }
 
 // Now returns SolarTime equivalent to time.Now() in UTC+8.
 func Now() SolarTime {
-	loc := time.FixedZone("CST", 8*3600)
-	t, _ := SolarTimeFromTime(time.Now().In(loc))
+	t, _ := SolarTimeFromTime(time.Now().In(locCST))
 	return t
 }
 

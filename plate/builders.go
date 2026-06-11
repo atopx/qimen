@@ -1,23 +1,14 @@
 package plate
 
 import (
-	"errors"
-
 	"github.com/atopx/qimen/almanac"
 	"github.com/atopx/qimen/enum"
 	"github.com/atopx/qimen/internal/tables"
 )
 
-// ErrUnsupportedStyle indicates a chart style that is not yet implemented.
-//
-// Style validation is a Chart-entry-point concern; the BuildXxx
-// primitives assume StyleRotate semantics and have no error return.
-// Currently only enum.StyleRotate is supported; StyleFly is reserved.
-var ErrUnsupportedStyle = errors.New("plate: unsupported chart style")
-
 // BuildEarth populates 地盘 (三奇六仪) from the local 局 and 阴/阳 遁.
-func BuildEarth(yy almanac.YinYang, ju uint8) *StemPlate {
-	p := New[almanac.Stem]()
+func BuildEarth(yy almanac.YinYang, ju uint8) StemPlate {
+	var p StemPlate
 	palace := ju
 	for _, stemIdx := range tables.SanQiLiuYi {
 		p.Set(palace, almanac.StemOf(int(stemIdx)))
@@ -26,10 +17,10 @@ func BuildEarth(yy almanac.YinYang, ju uint8) *StemPlate {
 	return p
 }
 
-// BuildHeaven populates 天盘 from 地盘 + 值符落宫 + 时干落宫.
-func BuildHeaven(earth *StemPlate, yy almanac.YinYang, zhiFuPalace, hourPalace uint8) *StemPlate {
-	p := New[almanac.Stem]()
-	zhiFuIdx := int(tables.LuoShuIndex[zhiFuPalace])
+// BuildHeaven populates 天盘 from 地盘 + 值符原宫 + 时干落宫.
+func BuildHeaven(earth *StemPlate, yy almanac.YinYang, zhiFuOriginalPalace, hourPalace uint8) StemPlate {
+	var p StemPlate
+	zhiFuIdx := int(tables.LuoShuIndex[zhiFuOriginalPalace])
 	hourIdx := int(tables.LuoShuIndex[hourPalace])
 	var steps int
 	if yy == almanac.Yang {
@@ -55,9 +46,9 @@ func BuildHeaven(earth *StemPlate, yy almanac.YinYang, zhiFuPalace, hourPalace u
 }
 
 // BuildStar populates 九星盘. 禽 falls into 2 with the merged 禽芮 marker.
-func BuildStar(zhiFuPalace, hourPalace uint8) *StarPlate {
-	p := New[enum.Star]()
-	zhiFuIdx := int(tables.LuoShuIndex[zhiFuPalace])
+func BuildStar(zhiFuOriginalPalace, hourPalace uint8) StarPlate {
+	var p StarPlate
+	zhiFuIdx := int(tables.LuoShuIndex[zhiFuOriginalPalace])
 	hourIdx := int(tables.LuoShuIndex[hourPalace])
 	steps := (hourIdx + 8 - zhiFuIdx) % 8
 	for i, originalPalace := range tables.LuoShuOrder {
@@ -74,20 +65,24 @@ func BuildStar(zhiFuPalace, hourPalace uint8) *StarPlate {
 	return p
 }
 
-// BuildDoor populates 八门盘.
-func BuildDoor(yy almanac.YinYang, zhiFuPalace uint8, hour almanac.Cycle) *DoorPlate {
-	p := New[enum.Door]()
-	xunStartBranchIdx := TenXunStartBranchIndex(hour)
+// BuildDoor populates 八门盘 and returns the 值使落宫 alongside it.
+//
+// zhiShiOriginalPalace is the home palace of the 值使 door (= 值符原宫);
+// the door advances from there by the number of 时辰 elapsed since the
+// 旬首, which also determines the rotation of the other seven doors.
+func BuildDoor(yy almanac.YinYang, zhiShiOriginalPalace uint8, hour almanac.Cycle) (DoorPlate, uint8) {
+	var p DoorPlate
+	xunStartBranchIdx := hour.Ten().FirstBranch().Index()
 	hourBranchIdx := hour.Branch().Index()
 	branchSteps := (hourBranchIdx + 12 - xunStartBranchIdx) % 12
-	zhiShiPalace := MoveBy(zhiFuPalace, branchSteps, yy)
-	zhiFuIdx := int(tables.LuoShuIndex[zhiFuPalace])
+	zhiShiPalace := MoveBy(zhiShiOriginalPalace, branchSteps, yy)
+	zhiShiOriginIdx := int(tables.LuoShuIndex[zhiShiOriginalPalace])
 	zhiShiIdx := int(tables.LuoShuIndex[zhiShiPalace])
 	var steps int
 	if yy == almanac.Yang {
-		steps = (zhiShiIdx + 8 - zhiFuIdx) % 8
+		steps = (zhiShiIdx + 8 - zhiShiOriginIdx) % 8
 	} else {
-		steps = (zhiFuIdx + 8 - zhiShiIdx) % 8
+		steps = (zhiShiOriginIdx + 8 - zhiShiIdx) % 8
 	}
 	for i, originalPalace := range tables.LuoShuOrder {
 		var targetIdx int
@@ -99,38 +94,33 @@ func BuildDoor(yy almanac.YinYang, zhiFuPalace uint8, hour almanac.Cycle) *DoorP
 		// LuoShuOrder excludes center palace 5; every entry has a door.
 		p.Set(tables.LuoShuOrder[targetIdx], enum.DoorOfPalace(originalPalace))
 	}
-	return p
+	return p, zhiShiPalace
 }
 
-// BuildGod populates 九神盘.
-func BuildGod(yy almanac.YinYang, zhiFuPalace uint8) *GodPlate {
-	p := New[enum.God]()
-	var order [8]uint8
-	if yy == almanac.Yang {
-		order = tables.GodYangOrder
-	} else {
-		order = tables.GodYinOrder
-	}
+// BuildGod populates 九神盘: the gods follow the LuoShu ring from the
+// 值符落宫, forward in 阳遁 and backward in 阴遁.
+func BuildGod(yy almanac.YinYang, zhiFuPalace uint8) GodPlate {
+	var p GodPlate
 	startPalace := zhiFuPalace
 	if startPalace == 5 {
 		startPalace = 2
 	}
-	startIndex := 0
-	for i, v := range order {
-		if v == startPalace {
-			startIndex = i
-			break
-		}
-	}
+	start := int(tables.LuoShuIndex[startPalace])
 	for i, god := range tables.GodsOrder {
-		p.Set(order[(startIndex+i)%8], god)
+		var pos int
+		if yy == almanac.Yang {
+			pos = (start + i) % 8
+		} else {
+			pos = (start - i + 8) % 8
+		}
+		p.Set(tables.LuoShuOrder[pos], god)
 	}
 	return p
 }
 
 // BuildHidden populates 暗干盘 (从 8 宫起).
-func BuildHidden(yy almanac.YinYang) *StemPlate {
-	p := New[almanac.Stem]()
+func BuildHidden(yy almanac.YinYang) StemPlate {
+	var p StemPlate
 	palace := uint8(8)
 	for _, stemIdx := range tables.SanQiLiuYi {
 		p.Set(palace, almanac.StemOf(int(stemIdx)))

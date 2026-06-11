@@ -319,9 +319,9 @@ func diffPalace(n uint8, got *palace.Palace, want *dumpPalace) []string {
 		errs = append(errs, fmt.Sprintf("%s: got %q, want %q",
 			mk("earth_heaven_stem"), got.EarthStem.Name(), want.EarthHeavenStem))
 	}
-	if got.SanQiLiuYi.Name() != want.SanQiLiuYi {
+	if got.EarthStem.Name() != want.SanQiLiuYi {
 		errs = append(errs, fmt.Sprintf("%s: got %q, want %q",
-			mk("san_qi_liu_yi"), got.SanQiLiuYi.Name(), want.SanQiLiuYi))
+			mk("san_qi_liu_yi"), got.EarthStem.Name(), want.SanQiLiuYi))
 	}
 	if got.HeavenStem.Name() != want.HeavenHeavenStem {
 		errs = append(errs, fmt.Sprintf("%s: got %q, want %q",

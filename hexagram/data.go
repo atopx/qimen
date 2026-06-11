@@ -153,7 +153,3 @@ var auspiceTable = [64]auspice.Auspice{
 	auspice.Neutral,           // 62 水火既济
 	auspice.Neutral,           // 63 火水未济
 }
-
-// StarElementName is unused but reserved for future API.
-// Element relationships for hexagrams use upper/lower trigram element pairs.
-var _ = auspice.Neutral

@@ -2,7 +2,11 @@
 // (used by both palace classifications and door/star × palace analyses).
 package element
 
-import "github.com/atopx/qimen/auspice"
+import (
+	"github.com/atopx/qimen/almanac"
+	"github.com/atopx/qimen/auspice"
+	"github.com/atopx/qimen/enum"
+)
 
 // Element 五行.
 type Element uint8
@@ -36,9 +40,8 @@ var stemElements = [10]Element{
 	Earth, Metal, Metal, Water, Water,
 }
 
-// FromStemIndex returns the element of a stem.
-// Precondition: i ∈ [0, 9].
-func FromStemIndex(i int) Element { return stemElements[i] }
+// OfStem returns the element of a heavenly stem.
+func OfStem(s almanac.Stem) Element { return stemElements[s.Index()] }
 
 // branchElements maps branch index (0..11 = 子..亥) → Element.
 //
@@ -48,9 +51,8 @@ var branchElements = [12]Element{
 	Fire, Earth, Metal, Metal, Earth, Water,
 }
 
-// FromBranchIndex returns the element of a branch.
-// Precondition: i ∈ [0, 11].
-func FromBranchIndex(i int) Element { return branchElements[i] }
+// OfBranch returns the element of an earthly branch.
+func OfBranch(b almanac.Branch) Element { return branchElements[b.Index()] }
 
 // palaceElements maps palace 1..9 → Element. Index 0 reserved.
 //
@@ -68,8 +70,6 @@ func FromPalace(palace uint8) Element { return palaceElements[palace] }
 //
 //	天蓬=水 天芮/天禽/天任/禽芮=土 天冲/天辅=木
 //	天心/天柱=金 天英=火.
-//
-// Indexed by raw star value to keep this package free of enum imports.
 var starElements = [10]Element{
 	Water, Earth, Wood, Wood, Earth,
 	Metal, Metal, Earth, Fire, Earth,
@@ -83,14 +83,11 @@ var doorElements = [8]Element{
 	Fire, Earth, Metal, Metal,
 }
 
-// OfStar returns the 五行 of a 九星 (raw int = enum.Star value).
-// Untyped int avoids importing the enum package here.
-// Precondition: star ∈ [0, 9].
-func OfStar(star int) Element { return starElements[star] }
+// OfStar returns the 五行 of a 九星.
+func OfStar(s enum.Star) Element { return starElements[s] }
 
-// OfDoor returns the 五行 of a 八门 (raw int = enum.Door value).
-// Precondition: door ∈ [0, 7].
-func OfDoor(door int) Element { return doorElements[door] }
+// OfDoor returns the 五行 of a 八门.
+func OfDoor(d enum.Door) Element { return doorElements[d] }
 
 // Relation classifies the 五行 generative/restraining relationship
 // from the subject (self) to a counterpart (other).

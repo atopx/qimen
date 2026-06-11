@@ -51,22 +51,5 @@ func FindDoor(p *DoorPlate, door enum.Door) (uint8, bool) {
 
 // IsStemInTomb reports whether a stem lands in its 入墓 palace.
 func IsStemInTomb(stem almanac.Stem, palace uint8) bool {
-	idx := stem.Index()
-	if idx < 0 || idx >= 10 {
-		return false
-	}
-	return tables.StemTombPalace[idx] == palace
-}
-
-// TenXunStartBranchIndex returns the starting 地支 index of the 旬
-// containing the given hour pillar.
-func TenXunStartBranchIndex(hour almanac.Cycle) int {
-	tenIdx := hour.Ten().Index()
-	if tenIdx > 5 {
-		tenIdx = 5
-	}
-	if tenIdx < 0 {
-		tenIdx = 0
-	}
-	return int(tables.TenXunStartBranch[tenIdx])
+	return tables.StemTombPalace[stem.Index()] == palace
 }

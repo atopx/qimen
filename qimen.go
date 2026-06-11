@@ -20,7 +20,8 @@ import (
 // Chart is the result of one qimen 起局. Once built, all fields are
 // read-only and safe to share across goroutines.
 type Chart struct {
-	cfg chartCfg
+	method enum.Method
+	style  enum.Style
 
 	// Pillars + solar context
 	solar    almanac.SolarTime
@@ -30,7 +31,7 @@ type Chart struct {
 	ju       uint8
 	yuan     enum.Yuan
 	xunShou  almanac.Stem
-	zhiFu    Duty
+	zhiFu    DutyStar
 	zhiShi   DutyDoor
 	kongWang [2]almanac.Branch
 	lunarDay almanac.LunarDay // cached at build for O(1) LunarDay() access
@@ -41,17 +42,7 @@ type Chart struct {
 }
 
 // config holds optional construction parameters set via Option.
-// loc applies only at the entry points that accept a time / Unix instant;
-// it is consumed and discarded before reaching build().
 type config struct {
-	method enum.Method
-	style  enum.Style
-	loc    *time.Location
-}
-
-// chartCfg is the slimmed config persisted inside Chart — only the
-// fields needed by Method()/Style() accessors.
-type chartCfg struct {
 	method enum.Method
 	style  enum.Style
 }
@@ -69,9 +60,9 @@ func WithStyle(s enum.Style) Option {
 	return func(c *config) { c.style = s }
 }
 
-// Duty is the 值符 entry: the 九星 currently acting as 值符, its
+// DutyStar is the 值符 entry: the 九星 currently acting as 值符, its
 // originating palace, and the palace it has rotated into.
-type Duty struct {
+type DutyStar struct {
 	Star           enum.Star
 	OriginalPalace uint8
 	Palace         uint8
@@ -85,31 +76,17 @@ type DutyDoor struct {
 	Palace         uint8
 }
 
-// defaultConfig returns the default construction options:
-// 时家 / 转盘 / Asia/Shanghai (UTC+8).
+// defaultConfig returns the default construction options: 时家 / 转盘.
 func defaultConfig() config {
-	return config{
-		method: enum.MethodTime,
-		style:  enum.StyleRotate,
-		loc:    time.FixedZone("CST", 8*3600),
-	}
+	return config{method: enum.MethodTime, style: enum.StyleRotate}
 }
 
-// New builds a chart for the current solar instant in UTC+8.
-//
-// Construction with default options is infallible; this avoids forcing
-// callers to handle an error in the most common code path.
-func New(opts ...Option) *Chart {
-	cfg := defaultConfig()
-	for _, o := range opts {
-		o(&cfg)
-	}
-	st := almanac.Now()
-	chart, err := build(st, cfg)
-	if err != nil {
-		panic("qimen.New: default options must succeed: " + err.Error())
-	}
-	return chart
+// New builds a chart for the current instant (UTC+8 wall clock) with
+// default options (时家 / 转盘). Construction with defaults cannot fail,
+// so the most common code path needs no error handling. Use From /
+// FromTime for non-default options or instants.
+func New() *Chart {
+	return build(almanac.Now(), defaultConfig())
 }
 
 // From builds a chart from a [almanac.SolarTime].
@@ -118,7 +95,10 @@ func From(t almanac.SolarTime, opts ...Option) (*Chart, error) {
 	for _, o := range opts {
 		o(&cfg)
 	}
-	return build(t, cfg)
+	if err := validateConfig(cfg); err != nil {
+		return nil, err
+	}
+	return build(t, cfg), nil
 }
 
 // MustFrom is like From but panics on error. Useful for tests and
@@ -131,36 +111,31 @@ func MustFrom(t almanac.SolarTime, opts ...Option) *Chart {
 	return chart
 }
 
-// FromTime builds a chart from a standard library [time.Time]. The
-// for this entry point.
+// FromTime builds a chart from a standard library [time.Time], using the
+// time's own wall clock — its Location is respected as-is, never
+// converted. Classical qimen casts charts in the local civil time of the
+// event; convert explicitly (t.In(loc)) before calling when the value's
+// zone is not the intended one.
 func FromTime(t time.Time, opts ...Option) (*Chart, error) {
-	cfg := defaultConfig()
-	for _, o := range opts {
-		o(&cfg)
-	}
 	st, err := almanac.SolarTimeFromTime(t)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidTime, err)
+		return nil, err // already wraps ErrInvalidTime
 	}
-	return build(st, cfg)
+	return From(st, opts...)
 }
 
-// FromTimestamp builds a chart from a Unix-seconds timestamp.
-// The default location is UTC+8.
+// FromTimestamp builds a chart from a Unix-seconds timestamp, interpreted
+// as a UTC+8 (China Standard Time) wall clock. For another zone use
+// FromTime(time.Unix(unix, 0).In(loc)).
 func FromTimestamp(unix int64, opts ...Option) (*Chart, error) {
-	cfg := defaultConfig()
-	for _, o := range opts {
-		o(&cfg)
-	}
-	t := time.Unix(unix, 0).In(cfg.loc)
-	st, err := almanac.SolarTimeFromTime(t)
+	st, err := almanac.SolarTimeFromUnix(unix)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidTime, err)
+		return nil, err // already wraps ErrInvalidTime
 	}
-	return build(st, cfg)
+	return From(st, opts...)
 }
 
-// validateConfig checks Method + Style at the single Chart entry point.
+// validateConfig checks Method + Style at the Chart entry points.
 // Returns sentinel errors that wrap to errors.Is matchers.
 func validateConfig(cfg config) error {
 	if cfg.method != enum.MethodTime {
@@ -172,15 +147,14 @@ func validateConfig(cfg config) error {
 	return nil
 }
 
-// build is the shared chart-construction routine.
-func build(t almanac.SolarTime, cfg config) (*Chart, error) {
-	if err := validateConfig(cfg); err != nil {
-		return nil, err
-	}
-
-	pillars := t.Pillars()
+// build is the shared chart-construction routine. cfg must already be
+// validated; build itself is total over its closed-domain inputs.
+func build(t almanac.SolarTime, cfg config) *Chart {
+	// Resolve the solar term once; pillars, 阴阳遁 and 局 all derive
+	// from it without further term lookups.
 	term := t.Term()
-	yinYang := compute.YinYang(t)
+	pillars := almanac.PillarsAt(t, term)
+	yinYang := term.YinYang()
 	yuan := compute.Yuan(pillars.Day)
 	ju := compute.Ju(term, yuan)
 
@@ -191,15 +165,17 @@ func build(t almanac.SolarTime, cfg config) (*Chart, error) {
 	xunShou := compute.XunShou(pillars.Hour)
 	hourStem := pillars.Hour.Stem()
 
+	// 值符原宫: the earth plate always contains the 旬首 stem (one of
+	// 戊..癸) outside the center; the fallback is defensive only.
 	zhiFuOriginalPalace := uint8(2)
-	if p, ok := plate.FindStem(earth, xunShou, true); ok {
+	if p, ok := plate.FindStem(&earth, xunShou, true); ok {
 		zhiFuOriginalPalace = p
 	}
-	zhiFuPalace := plate.FindHourStem(earth, hourStem, zhiFuOriginalPalace)
+	zhiFuPalace := plate.FindHourStem(&earth, hourStem, zhiFuOriginalPalace)
 
-	heaven := plate.BuildHeaven(earth, yinYang, zhiFuOriginalPalace, zhiFuPalace)
+	heaven := plate.BuildHeaven(&earth, yinYang, zhiFuOriginalPalace, zhiFuPalace)
 	stars := plate.BuildStar(zhiFuOriginalPalace, zhiFuPalace)
-	doors := plate.BuildDoor(yinYang, zhiFuOriginalPalace, pillars.Hour)
+	doors, zhiShiPalace := plate.BuildDoor(yinYang, zhiFuOriginalPalace, pillars.Hour)
 	gods := plate.BuildGod(yinYang, zhiFuPalace)
 	hidden := plate.BuildHidden(yinYang)
 
@@ -215,12 +191,8 @@ func build(t almanac.SolarTime, cfg config) (*Chart, error) {
 	if zhiFuOriginalPalace != 5 {
 		zhiShiDoor = enum.DoorOfPalace(zhiFuOriginalPalace)
 	}
-	zhiShiPalace := zhiFuPalace
-	if p, ok := plate.FindDoor(doors, zhiShiDoor); ok {
-		zhiShiPalace = p
-	}
 
-	kongWang := compute.KongWang(pillars.Hour)
+	kongWang := pillars.Hour.EmptyBranches()
 
 	// Assemble 9 palaces in place (no heap allocations).
 	var palaces [9]palace.Palace
@@ -243,7 +215,6 @@ func build(t almanac.SolarTime, cfg config) (*Chart, error) {
 		p.EarthStem = earthStem
 		p.HeavenStem = heavenStem
 		p.HiddenStem = hiddenStem
-		p.SanQiLiuYi = earthStem
 		// Star / Door / God only populated for non-center palaces
 		// (BuildStar/Door/God iterate LuoShuOrder which excludes palace 5).
 		if n != 5 {
@@ -268,7 +239,7 @@ func build(t almanac.SolarTime, cfg config) (*Chart, error) {
 		p.Hexagram = hexagram.Of(upper, lower)
 	}
 
-	// Pattern detection (build input view, then dispatch results to palaces).
+	// Pattern detection (build input view, then bucket results per palace).
 	pIn := pattern.DetectInput{
 		ZhiFuOriginalPalace: zhiFuOriginalPalace,
 		ZhiFuPalace:         zhiFuPalace,
@@ -286,11 +257,9 @@ func build(t almanac.SolarTime, cfg config) (*Chart, error) {
 		}
 		pIn.Branches[i] = p.Branches
 	}
-	for pat := range pattern.Detect(pIn) {
-		n := pat.Palace
-		if n >= 1 && n <= 9 {
-			palaces[n-1].Patterns = append(palaces[n-1].Patterns, pat)
-		}
+	pats := pattern.AppendAll(make([]pattern.Pattern, 0, 12), &pIn)
+	for i, ps := range bucketByPalace(pats, patternPalace) {
+		palaces[i].Patterns = ps
 	}
 
 	// 神煞 detection.
@@ -303,15 +272,16 @@ func build(t almanac.SolarTime, cfg config) (*Chart, error) {
 	for i := 0; i < 9; i++ {
 		ssIn.EarthStems[i] = palaces[i].EarthStem
 	}
-	for ss := range shensha.Detect(ssIn) {
-		n := ss.Palace
-		if n >= 1 && n <= 9 {
-			palaces[n-1].ShenSha = append(palaces[n-1].ShenSha, ss)
-		}
+	// The 10 神煞 kinds yield at most 12 instances (each 地盘 stem is
+	// unique, so stem-anchored kinds land in at most one palace each).
+	sss := shensha.AppendAll(make([]shensha.ShenSha, 0, 12), &ssIn)
+	for i, ss := range bucketByPalace(sss, shenshaPalace) {
+		palaces[i].ShenSha = ss
 	}
 
 	return &Chart{
-		cfg:      chartCfg{method: cfg.method, style: cfg.style},
+		method:   cfg.method,
+		style:    cfg.style,
 		solar:    t,
 		pillars:  pillars,
 		term:     term,
@@ -319,12 +289,40 @@ func build(t almanac.SolarTime, cfg config) (*Chart, error) {
 		ju:       ju,
 		yuan:     yuan,
 		xunShou:  xunShou,
-		zhiFu:    Duty{Star: zhiFuStar, OriginalPalace: zhiFuOriginalPalace, Palace: zhiFuPalace},
+		zhiFu:    DutyStar{Star: zhiFuStar, OriginalPalace: zhiFuOriginalPalace, Palace: zhiFuPalace},
 		zhiShi:   DutyDoor{Door: zhiShiDoor, OriginalPalace: zhiFuOriginalPalace, Palace: zhiShiPalace},
 		kongWang: kongWang,
 		lunarDay: t.LunarDay(),
 		palaces:  palaces,
-	}, nil
+	}
+}
+
+func patternPalace(p pattern.Pattern) uint8 { return p.Palace }
+func shenshaPalace(s shensha.ShenSha) uint8 { return s.Palace }
+
+// bucketByPalace regroups detection results (each tagged with a palace
+// number 1..9) into 9 per-palace sub-slices of the SAME backing array:
+// items are stably sorted by palace in place (they arrive nearly sorted,
+// so insertion sort is effectively linear), then sliced per palace with
+// the capacity clamped so appending to one palace's slice cannot clobber
+// a neighbour's. Zero additional allocations.
+func bucketByPalace[T any](items []T, palaceOf func(T) uint8) [9][]T {
+	for i := 1; i < len(items); i++ {
+		for j := i; j > 0 && palaceOf(items[j]) < palaceOf(items[j-1]); j-- {
+			items[j], items[j-1] = items[j-1], items[j]
+		}
+	}
+	var out [9][]T
+	for start := 0; start < len(items); {
+		p := palaceOf(items[start])
+		end := start + 1
+		for end < len(items) && palaceOf(items[end]) == p {
+			end++
+		}
+		out[p-1] = items[start:end:end]
+		start = end
+	}
+	return out
 }
 
 // ===================== context accessors =====================
@@ -337,10 +335,10 @@ func (c *Chart) SolarTime() almanac.SolarTime { return c.solar }
 func (c *Chart) LunarDay() almanac.LunarDay { return c.lunarDay }
 
 // Method returns the chart's 起局法门 (currently always MethodTime).
-func (c *Chart) Method() enum.Method { return c.cfg.method }
+func (c *Chart) Method() enum.Method { return c.method }
 
 // Style returns the chart's 盘式 (currently always StyleRotate).
-func (c *Chart) Style() enum.Style { return c.cfg.style }
+func (c *Chart) Style() enum.Style { return c.style }
 
 // Year returns the 年柱 sixty cycle.
 func (c *Chart) Year() almanac.Cycle { return c.pillars.Year }
@@ -370,7 +368,7 @@ func (c *Chart) Yuan() enum.Yuan { return c.yuan }
 func (c *Chart) XunShou() almanac.Stem { return c.xunShou }
 
 // ZhiFu returns the 值符 duty record.
-func (c *Chart) ZhiFu() Duty { return c.zhiFu }
+func (c *Chart) ZhiFu() DutyStar { return c.zhiFu }
 
 // ZhiShi returns the 值使 duty record.
 func (c *Chart) ZhiShi() DutyDoor { return c.zhiShi }
@@ -421,12 +419,12 @@ func (c *Chart) Grid() [3][3]*palace.Palace {
 //   - 甲 (idx 0) has no visible position; falls back to the 值符原宫.
 //   - Other stems are looked up; center palace stems are mapped to 2 (坤).
 func (c *Chart) StemPalace(stem almanac.Stem) uint8 {
-	if stem.Index() == 0 {
+	if stem == almanac.Jia {
 		return c.zhiFu.OriginalPalace
 	}
 	for i := range c.palaces {
 		p := &c.palaces[i]
-		if p.EarthStem.Index() == stem.Index() {
+		if p.EarthStem == stem {
 			if p.Number == 5 {
 				return 2
 			}

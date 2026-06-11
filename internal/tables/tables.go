@@ -19,12 +19,6 @@ var LuoShuOrder = [8]uint8{1, 8, 3, 4, 9, 2, 7, 6}
 // Center (palace 5) maps to 0 as a sentinel; callers must filter.
 var LuoShuIndex = [10]uint8{0, 0, 5, 2, 3, 0, 7, 6, 1, 4}
 
-// GodYangOrder 阳遁九神 layout sequence (8 non-center palaces).
-var GodYangOrder = [8]uint8{1, 8, 3, 4, 9, 2, 7, 6}
-
-// GodYinOrder 阴遁九神 layout sequence.
-var GodYinOrder = [8]uint8{1, 6, 7, 2, 9, 4, 3, 8}
-
 // GodsOrder 九神 in canonical sequence: 值符 腾蛇 太阴 六合 白虎 玄武 九地 九天.
 var GodsOrder = [8]enum.God{
 	enum.GodZhiFu,
@@ -73,14 +67,6 @@ var TermJu = [24][3]uint8{
 
 // TenXunShou 旬首 stem indices: 甲子→戊, 甲戌→己, 甲申→庚, 甲午→辛, 甲辰→壬, 甲寅→癸.
 var TenXunShou = [6]uint8{4, 5, 6, 7, 8, 9}
-
-// TenXunStartBranch 旬首起始地支 indices.
-var TenXunStartBranch = [6]uint8{0, 10, 8, 6, 4, 2}
-
-// TenKongBranches 旬空亡地支 pairs.
-var TenKongBranches = [6][2]uint8{
-	{10, 11}, {8, 9}, {6, 7}, {4, 5}, {2, 3}, {0, 1},
-}
 
 // BranchToPalace 地支 (0..11) → 落宫.
 //

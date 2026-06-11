@@ -29,10 +29,9 @@ type Palace struct {
 	Name       string
 	Direction  almanac.Direction
 	Branches   []almanac.Branch
-	EarthStem  almanac.Stem
+	EarthStem  almanac.Stem // 地盘干 (三奇六仪)
 	HeavenStem almanac.Stem
 	HiddenStem almanac.Stem
-	SanQiLiuYi almanac.Stem
 
 	// Populated iff Number != 5. Reading any of these for the center
 	// palace yields zero values.
@@ -64,7 +63,7 @@ func (p *Palace) DoorPalaceRelation() Relation {
 	if p.IsCenter() {
 		return Relation{}
 	}
-	return relationFromSubject(p.Door.Name(), element.OfDoor(int(p.Door)), p.Element())
+	return relationFromSubject(p.Door.Name(), element.OfDoor(p.Door), p.Element())
 }
 
 // StarPalaceRelation computes how the 九星 of this palace relates to
@@ -73,7 +72,7 @@ func (p *Palace) StarPalaceRelation() Relation {
 	if p.IsCenter() {
 		return Relation{}
 	}
-	return relationFromSubject(p.Star.Name(), element.OfStar(int(p.Star)), p.Element())
+	return relationFromSubject(p.Star.Name(), element.OfStar(p.Star), p.Element())
 }
 
 // Relation is the result of a subject (door/star) vs. palace 五行 comparison.

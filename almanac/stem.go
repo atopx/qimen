@@ -70,9 +70,6 @@ func (s Stem) YinYang() YinYang {
 	return Yin
 }
 
-// Element returns the five-element index (0=木..4=水).
-func (s Stem) Element() int { return int(stemElement[s]) }
-
 // TenStarOf returns the 十神 relationship from self s to target.
 //
 // Categories (element relation between self and target, in pairs of 2):
@@ -86,8 +83,8 @@ func (s Stem) Element() int { return int(stemElement[s]) }
 // Within each pair, same-parity (both 阳 or both 阴) picks the even index
 // (比肩/食神/偏财/七杀/偏印); mixed parity picks the odd index.
 func (s Stem) TenStarOf(target Stem) TenStar {
-	se := s.Element()
-	te := target.Element()
+	se := int(stemElement[s])
+	te := int(stemElement[target])
 	var cat int
 	switch {
 	case se == te:
