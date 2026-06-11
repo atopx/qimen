@@ -116,9 +116,6 @@ func (t Term) IsJie() bool { return t.index%2 == 1 }
 // IsQi reports whether the term is a "气" (even index — 冬至, 大寒, 雨水, ...).
 func (t Term) IsQi() bool { return t.index%2 == 0 }
 
-// CursoryJulianDay returns the calendar-rounded Julian Day (noon-precision).
-func (t Term) CursoryJulianDay() float64 { return t.cursoryJulianDay }
-
 // JulianDay returns the second-precision Julian Day of the term's start
 // (cached at construction).
 func (t Term) JulianDay() float64 { return t.julianDay }
@@ -126,6 +123,19 @@ func (t Term) JulianDay() float64 { return t.julianDay }
 // SolarTime returns the solar instant when this term begins.
 func (t Term) SolarTime() SolarTime {
 	return solarFromJulianDay(t.julianDay)
+}
+
+// DayNumber returns the day ordinal (see [DayNumber]) of the term's
+// start, computed directly from the cached Julian Day. Equivalent to
+// DayNumber(t.SolarTime()) — including the second rounding that decides
+// the 23:00 day roll — without the calendar round-trip.
+func (t Term) DayNumber() int {
+	d := math.Floor(t.julianDay + 0.5)
+	n := int(d) - jdJiaZiDayAnchor
+	if math.Round((t.julianDay+0.5-d)*86400) >= 23*3600 {
+		n++
+	}
+	return n
 }
 
 // Next returns the term n steps ahead (negative = backward).

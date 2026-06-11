@@ -1,28 +1,12 @@
 package qimen
 
-import (
-	"errors"
+import "github.com/atopx/qimen/almanac"
 
-	"github.com/atopx/qimen/almanac"
-)
-
-// Sentinel errors. All are errors.Is-friendly and can be wrapped freely.
+// ErrInvalidTime is returned by FromTime / FromTimestamp for invalid
+// solar-time inputs. It is the same sentinel as [almanac.ErrInvalidTime]
+// (the almanac layer is where time validation happens), so errors.Is
+// matches against either name.
 //
-// Each sentinel lives in the package that produces it: Method / Style
-// are validated only at the Chart entry points, so their sentinels are
-// defined here; time validation happens in the almanac layer, so
-// ErrInvalidTime aliases the almanac sentinel.
-var (
-	// ErrUnsupportedMethod is returned when an unimplemented enum.Method
-	// (MethodDay/Month/Year) is supplied via WithMethod.
-	ErrUnsupportedMethod = errors.New("qimen: unsupported method")
-
-	// ErrUnsupportedStyle is returned when StyleFly or StyleSiZhu is
-	// supplied via WithStyle.
-	ErrUnsupportedStyle = errors.New("qimen: unsupported style")
-
-	// ErrInvalidTime is returned for invalid solar-time inputs. It is
-	// the same sentinel as [almanac.ErrInvalidTime], so errors.Is
-	// matches against either name.
-	ErrInvalidTime = almanac.ErrInvalidTime
-)
+// Chart construction itself is total: every Method / Style / JuRule is
+// implemented, so [From] and [New] have no error path.
+var ErrInvalidTime = almanac.ErrInvalidTime

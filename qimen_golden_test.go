@@ -7,14 +7,18 @@ import (
 	"github.com/atopx/qimen/enum"
 )
 
-// goldenChart is one authoritative 时家转盘置闰 chart, transcribed from
-// reference paipan software output. Palaces are encoded palace 1..9 as
-// six runes: 天盘干 地盘干 暗干 星 门 神 (star/door/god are single-rune
-// abbreviations; the center palace uses '-' for its empty slots).
+// goldenChart is one authoritative chart transcribed from reference
+// paipan software output, covering 时/日/月/年家, 转盘/飞盘 and both
+// 定局规则. Palaces are encoded palace 1..9 as six runes: 天盘干 地盘干
+// 暗干 星 门 神 (star/door/god are single-rune abbreviations; '-' marks
+// an empty slot).
 type goldenChart struct {
 	when     string // "YYYY-MM-DD HH:MM"
 	note     string
-	pillars  string // "年 月 日 时"
+	method   enum.Method // zero value = MethodTime
+	style    enum.Style  // zero value = StyleRotate
+	juRule   enum.JuRule // zero value = JuRuleZhiRun
+	pillars  string      // "年 月 日 时"
 	yinYang  string
 	ju       uint8
 	xun      string // 旬 name, e.g. "甲寅"
@@ -205,6 +209,66 @@ var goldenCharts = []goldenChart{
 			"丁辛丁辅杜阴", "辛庚辛柱惊天", "庚己庚任生虎",
 		},
 	},
+	{
+		when: "2026-01-14 01:03", note: "时家飞盘置闰: 九星数飞, 天禽落实宫, 九神含太常, 值使走满九步回本位",
+		style:   enum.StyleFly,
+		pillars: "乙巳 己丑 戊子 癸丑", yinYang: "阳", ju: 8,
+		xun: "甲辰", xunStem: "壬", kongWang: "寅卯",
+		zhiFu: "天冲", zfOrig: 3, zfLand: 4, zhiShi: "伤", zsLand: 3,
+		palaces: [9]string{
+			"己庚庚英休玄", "庚辛辛蓬死地", "辛壬壬芮伤天",
+			"壬癸癸冲杜符", "癸丁丁辅-蛇", "丁丙丙禽开阴",
+			"丙乙乙心惊合", "乙戊戊柱生虎", "戊己己任景常",
+		},
+	},
+	{
+		when: "2024-12-26 12:00", note: "日家转盘 (拆补): 冬至上元阳一, 甲子日全盘伏吟",
+		method: enum.MethodDay, juRule: enum.JuRuleChaiBu,
+		pillars: "甲辰 丙子 甲子 庚午", yinYang: "阳", ju: 1,
+		xun: "甲子", xunStem: "戊", kongWang: "戌亥",
+		zhiFu: "天蓬", zfOrig: 1, zfLand: 1, zhiShi: "休", zsLand: 1,
+		palaces: [9]string{
+			"戊戊戊蓬休符", "己己己芮死玄", "庚庚庚冲伤阴",
+			"辛辛辛辅杜合", "壬壬壬---", "癸癸癸心开天",
+			"丁丁丁柱惊地", "丙丙丙任生蛇", "乙乙乙英景虎",
+		},
+	},
+	{
+		when: "2024-12-25 12:00", note: "日家转盘 (拆补): 冬至下元阳四 — 日家与时家共用节气三元",
+		method: enum.MethodDay, juRule: enum.JuRuleChaiBu,
+		pillars: "甲辰 丙子 癸亥 戊午", yinYang: "阳", ju: 4,
+		xun: "甲寅", xunStem: "癸", kongWang: "子丑",
+		zhiFu: "天英", zfOrig: 9, zfLand: 9, zhiShi: "景", zsLand: 9,
+		palaces: [9]string{
+			"丁丁丁蓬休虎", "丙丙丙芮死蛇", "乙乙乙冲伤地",
+			"戊戊戊辅杜天", "己己己---", "庚庚庚心开合",
+			"辛辛辛柱惊阴", "壬壬壬任生玄", "癸癸癸英景符",
+		},
+	},
+	{
+		when: "2024-12-25 12:00", note: "月家转盘: 甲辰年子月 阴遁四局 (寅月起五逆行), 主柱月柱",
+		method:  enum.MethodMonth,
+		pillars: "甲辰 丙子 癸亥 戊午", yinYang: "阴", ju: 4,
+		xun: "甲戌", xunStem: "己", kongWang: "申酉",
+		zhiFu: "天冲", zfOrig: 3, zfLand: 6, zhiShi: "伤", zsLand: 1,
+		palaces: [9]string{
+			"戊辛己辅伤天", "辛庚丙蓬开阴", "庚己壬芮景玄",
+			"丁戊庚柱死虎", "乙乙乙---", "己丙癸冲生符",
+			"癸丁辛任休蛇", "壬癸戊英杜地", "丙壬丁心惊合",
+		},
+	},
+	{
+		when: "2024-12-25 12:00", note: "年家转盘: 甲辰年 阴遁七局 (下元定局), 主柱年柱, 全盘伏吟",
+		method:  enum.MethodYear,
+		pillars: "甲辰 丙子 癸亥 戊午", yinYang: "阴", ju: 7,
+		xun: "甲辰", xunStem: "壬", kongWang: "寅卯",
+		zhiFu: "天冲", zfOrig: 3, zfLand: 3, zhiShi: "伤", zsLand: 3,
+		palaces: [9]string{
+			"丁丁丁蓬休阴", "癸癸癸芮死玄", "壬壬壬冲伤符",
+			"辛辛辛辅杜天", "庚庚庚---", "己己己心开合",
+			"戊戊戊柱惊虎", "乙乙乙任生蛇", "丙丙丙英景地",
+		},
+	},
 }
 
 var goldenStarNames = map[rune]string{
@@ -212,9 +276,18 @@ var goldenStarNames = map[rune]string{
 	'英': "天英", '芮': "禽芮", '柱': "天柱", '心': "天心",
 }
 
+// goldenFlyStarNames differs in the 禽/芮 pair: fly charts place 天禽
+// on its real palace, so 芮 is plain 天芮 (no merge marker).
+var goldenFlyStarNames = map[rune]string{
+	'蓬': "天蓬", '任': "天任", '冲': "天冲", '辅': "天辅",
+	'英': "天英", '芮': "天芮", '柱': "天柱", '心': "天心",
+	'禽': "天禽",
+}
+
 var goldenGodNames = map[rune]string{
 	'符': "值符", '蛇': "腾蛇", '阴': "太阴", '合': "六合",
 	'虎': "白虎", '玄': "玄武", '地': "九地", '天': "九天",
+	'常': "太常", // fly style: ninth god
 }
 
 // TestGoldenZhiRunCharts replays authoritative 置闰 charts and checks
@@ -226,7 +299,8 @@ func TestGoldenZhiRunCharts(t *testing.T) {
 			if _, err := fmt.Sscanf(g.when, "%d-%d-%d %d:%d", &y, &mo, &d, &h, &mi); err != nil {
 				t.Fatalf("parse %q: %v", g.when, err)
 			}
-			c := MustFrom(solarTime(t, y, mo, d, h, mi, 0), WithJuRule(enum.JuRuleZhiRun))
+			c := From(solarTime(t, y, mo, d, h, mi, 0),
+				WithMethod(g.method), WithStyle(g.style), WithJuRule(g.juRule))
 
 			pillars := fmt.Sprintf("%s %s %s %s", c.Year(), c.Month(), c.Day(), c.Hour())
 			if pillars != g.pillars {
@@ -236,7 +310,7 @@ func TestGoldenZhiRunCharts(t *testing.T) {
 				t.Errorf("ju: got %s遁%d局, want %s遁%d局 (%s)",
 					c.YinYang().Name(), c.Ju(), g.yinYang, g.ju, g.note)
 			}
-			if got := c.Hour().Ten().Name(); got != g.xun {
+			if got := c.Lead().Ten().Name(); got != g.xun {
 				t.Errorf("xun: got %s, want %s", got, g.xun)
 			}
 			if got := c.XunShou().Name(); got != g.xunStem {
@@ -272,19 +346,38 @@ func TestGoldenZhiRunCharts(t *testing.T) {
 				if got, want := p.HiddenStem.Name(), string(spec[2]); got != want {
 					t.Errorf("palace %d hidden: got %s, want %s", n, got, want)
 				}
-				if n == 5 {
-					continue // star/door/god are empty for the center
+				starTable := goldenStarNames
+				if g.style == enum.StyleFly {
+					starTable = goldenFlyStarNames
 				}
-				if got, want := p.Star.Name(), goldenStarNames[spec[3]]; got != want {
-					t.Errorf("palace %d star: got %s, want %s", n, got, want)
-				}
-				if got, want := p.Door.Name(), string(spec[4])+"门"; got != want {
-					t.Errorf("palace %d door: got %s, want %s", n, got, want)
-				}
-				if got, want := p.God.Name(), goldenGodNames[spec[5]]; got != want {
-					t.Errorf("palace %d god: got %s, want %s", n, got, want)
-				}
+				assertSlot(t, n, "star", spec[3], p.StarSet, func() string { return p.Star.Name() }, starTable)
+				assertSlot(t, n, "door", spec[4], p.DoorSet, func() string { return p.Door.Name() }, nil)
+				assertSlot(t, n, "god", spec[5], p.GodSet, func() string { return p.God.Name() }, goldenGodNames)
 			}
 		})
+	}
+}
+
+// assertSlot checks one palace slot against its golden rune: '-' means
+// the slot must be unset; otherwise the slot must be set and its name
+// must match (via the rune table when provided, verbatim otherwise).
+func assertSlot(t *testing.T, n uint8, slot string, want rune, set bool, name func() string, table map[rune]string) {
+	t.Helper()
+	if want == '-' {
+		if set {
+			t.Errorf("palace %d %s: got %s, want empty", n, slot, name())
+		}
+		return
+	}
+	if !set {
+		t.Errorf("palace %d %s: empty, want %c", n, slot, want)
+		return
+	}
+	wantName := string(want)
+	if table != nil {
+		wantName = table[want]
+	}
+	if got := name(); got != wantName {
+		t.Errorf("palace %d %s: got %s, want %s", n, slot, got, wantName)
 	}
 }

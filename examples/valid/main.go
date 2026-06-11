@@ -167,13 +167,7 @@ func main() {
 			continue
 		}
 
-		c, err := qimen.From(st)
-		if err != nil {
-			failedRecords++
-			totalMismatches++
-			_, _ = fmt.Fprintf(os.Stderr, "[%s] qimen.From error: %v\n", label, err)
-			continue
-		}
+		c := qimen.From(st)
 		mismatches := verifyOne(&rec, c)
 		if len(mismatches) > 0 {
 			failedRecords++

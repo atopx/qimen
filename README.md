@@ -1,6 +1,6 @@
 # qimen
 
-`qimen` 是零依赖的 Go 奇门遁甲 (时家三元) 起局库。内含自包含的历法引擎 (节气、朔望、四柱、农历) 和完整的盘面演算 (三奇六仪/天盘/暗干/九星/八门/九神), 提供二十四格局识别、十种神煞查算、六十四卦演卦、长生十二宫与十神的统一领域接口。
+`qimen` 是零依赖的 Go 奇门遁甲起局库, 支持时/日/月/年四家法门与转盘/飞盘两种盘式。内含自包含的历法引擎 (节气、朔望、四柱、农历、紫白) 和完整的盘面演算 (三奇六仪/天盘/暗干/九星/八门/九神), 提供二十四格局识别、十种神煞查算、六十四卦演卦、长生十二宫与十神的统一领域接口。时家置闰盘面经 16 组权威排盘结果逐项校验。
 
 ## 安装
 
@@ -23,9 +23,9 @@ import (
 
 func main() {
     // 4 种构造入口任选其一
-    chart := qimen.New()  // 当前时刻 (UTC+8), 默认配置, 不会失败
+    chart := qimen.New()  // 当前时刻 (UTC+8), 默认配置
     st, _ := almanac.SolarTimeOf(2026, 1, 14, 18, 45, 0) // 指定时刻
-    chart, _  = qimen.From(st) // 内部 SolarTime
+    chart  = qimen.From(st) // 内部 SolarTime, 全配置组合可构造, 无 error
     chart, _  = qimen.FromTime(time.Now()) // 标准库 time.Time, 取其挂钟时间
     chart, _  = qimen.FromTimestamp(1768376700) // Unix 秒, 按 UTC+8 解释
 
@@ -53,19 +53,32 @@ go run ./examples/deduce
 ## 起局选项
 
 ```go
-chart, err := qimen.From(st,
-    qimen.WithMethod(enum.MethodTime),     // 起局法门, 默认 MethodTime
-    qimen.WithStyle(enum.StyleRotate),     // 盘式, 默认 StyleRotate
-    qimen.WithJuRule(enum.JuRuleZhiRun),   // 定局规则, 默认 JuRuleChaiBu (拆补)
+chart := qimen.From(st,
+    qimen.WithMethod(enum.MethodTime),     // 起局法门: 时/日/月/年家, 默认时家
+    qimen.WithStyle(enum.StyleRotate),     // 盘式: 转盘/飞盘, 默认转盘
+    qimen.WithJuRule(enum.JuRuleChaiBu),   // 时家定局规则, 默认置闰
 )
 ```
 
-未实现的法门/盘式 (`MethodDay/Month/Year`, `StyleFly/SiZhu`) 返回 sentinel error, 可用 `errors.Is`:
+全部法门/盘式/定局规则组合均已实现, `From` 为全函数 (无 error)。
+`FromTime`/`FromTimestamp` 仅在历法输入越界时返回 `qimen.ErrInvalidTime`
+(与 `almanac.ErrInvalidTime` 同一哨兵, `errors.Is` 任一可匹配)。
 
-```go
-if errors.Is(err, qimen.ErrUnsupportedMethod) { /* ... */ }
-if errors.Is(err, qimen.ErrUnsupportedStyle)  { /* ... */ }
-```
+### 法门与盘式
+
+- **时家** (默认): 主柱为时柱, 局数由节气三元表给出;
+- **日家**: 主柱为日柱, 局数与时家同源 (节气三元本就按日定局), 同样支持置闰/拆补;
+- **月家**: 主柱为月柱, 恒阴遁; 寅月起局 8/5/2 (子午卯酉/辰戌丑未/寅申巳亥年),
+  逐月逆行;
+- **年家**: 主柱为年柱, 恒阴遁; 局按 60 年元固定 (上元一局/中元四局/下元七局,
+  1864 上元甲子起), 立春换年;
+- **转盘** (默认): 洛书环刚性转动, 中宫干与天禽寄坤二, 八神;
+- **飞盘**: 按 1..9 宫序数飞, 中宫实际参与, 天禽落实宫, 九星布满九宫,
+  九神 (含**太常**) 布满九宫, 八门留一宫空 (`Palace.StarSet/DoorSet/GodSet`
+  标志存在性)。
+
+日/月/年家与飞盘盘面已通过权威排盘结果逐项校验 (共 21 组金标准,
+见 `qimen_golden_test.go`)。
 
 ### 时区语义
 
@@ -80,10 +93,10 @@ if errors.Is(err, qimen.ErrUnsupportedStyle)  { /* ... */ }
 流派分歧点的取舍如下 (时家转盘主流做法):
 
 - 三元由日柱符头网格直推 (`index mod 15`), 两种定局规则共用;
-- 定局规则默认**拆补** (局随真实节气), 可选**置闰** (`WithJuRule(enum.JuRuleZhiRun)`):
+- 时家定局规则默认**置闰** (`WithJuRule` 可切换**拆补**):
   符头与二至对齐, 超神/接气, 符头超前满九日 (含符头日的传统计数) 时在芒种/大雪置闰;
   `chart.JuTerm()` 返回实际用局节气, `chart.Term()` 恒为天文节气;
-  置闰盘面已通过 14 组权威排盘结果逐项校验 (见 `qimen_golden_test.go`);
+  置闰盘面已通过权威排盘结果逐项校验 (见 `qimen_golden_test.go`);
 - 暗干随值使转动: 八门转几步, 地盘干随转几步 (门下藏干);
 - 日柱 23 点换日 (晚子时归次日);
 - 天盘中宫干原位保留, 坤二宫不另显寄宫双干。

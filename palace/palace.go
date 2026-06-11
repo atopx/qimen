@@ -18,12 +18,16 @@ import (
 
 // Palace holds the data for one of the 9 grid cells of a qimen chart.
 //
-// Field validity follows a single invariant: center palace (Number == 5)
-// has NO Star / Door / God / TenStar / Terrain / Hexagram — these slots
-// hold zero values. Every non-center palace has all six populated.
+// Star / Door / God presence depends on the chart style: in 转盘 the
+// center palace holds none of them; in 飞盘 the center participates in
+// the flight, nine stars cover nine palaces and the eight doors / gods
+// leave exactly one palace (not necessarily the center) empty. The
+// *Set flags are the source of truth for presence — the value fields
+// hold zero values when unset.
 //
-// Use [Palace.IsCenter] to gate access; the per-field `Set` flags that
-// previous versions exposed are now redundant and have been removed.
+// The derived attributes TenStar / Terrain are populated for every
+// non-center palace (the center has no branches to derive from), and
+// Hexagram additionally requires a door (HexagramSet).
 type Palace struct {
 	Number     uint8
 	Name       string
@@ -33,43 +37,45 @@ type Palace struct {
 	HeavenStem almanac.Stem
 	HiddenStem almanac.Stem
 
-	// Populated iff Number != 5. Reading any of these for the center
-	// palace yields zero values.
-	Star     enum.Star
-	Door     enum.Door
-	God      enum.God
-	TenStar  almanac.TenStar
-	Terrain  terrain.Terrain
-	Hexagram hexagram.Hexagram
+	Star    enum.Star
+	StarSet bool
+	Door    enum.Door
+	DoorSet bool
+	God     enum.God
+	GodSet  bool
+
+	// Populated iff Number != 5.
+	TenStar almanac.TenStar
+	Terrain terrain.Terrain
+	// Populated iff Number != 5 and DoorSet.
+	Hexagram    hexagram.Hexagram
+	HexagramSet bool
 
 	Patterns []pattern.Pattern
 	ShenSha  []shensha.ShenSha
 }
 
 // IsCenter reports whether this is the center palace (Number == 5).
-// Derived attributes (Star / Door / God / TenStar / Terrain / Hexagram)
-// are zero for the center; callers should gate by !IsCenter().
 func (p *Palace) IsCenter() bool { return p.Number == 5 }
 
 // Element returns the 五行 of this palace.
 func (p *Palace) Element() element.Element { return element.FromPalace(p.Number) }
 
 // DoorPalaceRelation computes how the 八门 of this palace relates to
-// its 宫位 五行. Returns the zero Relation for the center palace.
-//
-// Callers concerned with center-palace handling should check IsCenter()
-// first; the zero value is a defined sentinel (empty Description).
+// its 宫位 五行. Returns the zero Relation (empty Description) when the
+// palace holds no door.
 func (p *Palace) DoorPalaceRelation() Relation {
-	if p.IsCenter() {
+	if !p.DoorSet {
 		return Relation{}
 	}
 	return relationFromSubject(p.Door.Name(), element.OfDoor(p.Door), p.Element())
 }
 
 // StarPalaceRelation computes how the 九星 of this palace relates to
-// its 宫位 五行. Returns the zero Relation for the center palace.
+// its 宫位 五行. Returns the zero Relation (empty Description) when the
+// palace holds no star.
 func (p *Palace) StarPalaceRelation() Relation {
-	if p.IsCenter() {
+	if !p.StarSet {
 		return Relation{}
 	}
 	return relationFromSubject(p.Star.Name(), element.OfStar(p.Star), p.Element())

@@ -1,3 +1,3 @@
 module github.com/atopx/qimen
 
-go 1.26.2
+go 1.26

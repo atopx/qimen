@@ -13,8 +13,10 @@ import (
 // flat arrays here avoids a circular dependency between pattern and
 // palace packages.
 //
-// Arrays are indexed by (palace - 1); center (palace 5) is included
-// but the detection rules skip it.
+// Arrays are indexed by (palace - 1). The center palace is excluded
+// from per-palace rules in both styles: its rotate-style stems are a
+// constructional copy (not a rotation result), and classical pattern
+// reading stays on the eight outer palaces.
 type DetectInput struct {
 	ZhiFuOriginalPalace uint8
 	ZhiFuPalace         uint8
@@ -48,13 +50,11 @@ func AppendAll(dst []Pattern, in *DetectInput) []Pattern {
 		})
 	}
 
-	// Per-palace patterns
-	for i := 0; i < 9; i++ {
-		n := uint8(i + 1)
-		if n == 5 {
-			continue
+	// Per-palace patterns (eight outer palaces; see DetectInput).
+	for i := range 9 {
+		if n := uint8(i + 1); n != 5 {
+			dst = appendPalace(dst, n, in)
 		}
-		dst = appendPalace(dst, n, in)
 	}
 	return dst
 }

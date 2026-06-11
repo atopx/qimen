@@ -39,7 +39,7 @@ func BenchmarkFrom(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_ = MustFrom(sts[i%len(sts)])
+		_ = From(sts[i%len(sts)])
 	}
 }
 
@@ -50,7 +50,7 @@ func BenchmarkFrom_WithReads(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		c := MustFrom(sts[i%len(sts)])
+		c := From(sts[i%len(sts)])
 		for range c.Patterns() {
 		}
 		for range c.ShenSha() {
@@ -63,7 +63,7 @@ func BenchmarkFrom_WithReads(b *testing.B) {
 // on an already-built chart.
 func BenchmarkPalaceAccess(b *testing.B) {
 	sts := mustSolarTimes(b)
-	c := MustFrom(sts[0])
+	c := From(sts[0])
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {

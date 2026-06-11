@@ -32,7 +32,7 @@ const zhiRunThreshold = 7
 // one intercalation), so the anchor chosen below is locally decidable
 // with no historical state.
 func ZhiRunTerm(dayNum int, realTerm almanac.Term) almanac.Term {
-	f := dayNum - ((dayNum%15)+15)%15 // upper-yuan leader (符头) of this day
+	f := dayNum - floorMod(dayNum, 15) // upper-yuan leader (符头) of this day
 
 	// Candidate anchor solstices, nearest first: the upcoming one (the
 	// leader may already adopt it — 超神), the one opening the current
@@ -70,8 +70,8 @@ func ZhiRunTerm(dayNum int, realTerm almanac.Term) almanac.Term {
 // following leader when the lead reaches 8..14 days (the preceding
 // 芒种 / 大雪 was intercalated and the solstice runs 接气).
 func adoptingLeader(z almanac.Term) int {
-	zd := almanac.DayNumber(z.SolarTime())
-	lead := ((zd % 15) + 15) % 15
+	zd := z.DayNumber()
+	lead := floorMod(zd, 15)
 	g := zd - lead
 	if lead > zhiRunThreshold {
 		return g + 15

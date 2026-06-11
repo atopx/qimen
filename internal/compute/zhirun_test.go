@@ -45,7 +45,7 @@ func TestZhiRunInvariants(t *testing.T) {
 			t.Fatalf("%s: working term %s drifts %d terms from real %s",
 				st, ju.Name(), d, real.Name())
 		}
-		if ((dn%15)+15)%15 == 0 && Yuan(almanac.CycleOf(dn)) != enum.YuanUpper {
+		if floorMod(dn, 15) == 0 && Yuan(almanac.CycleOf(dn)) != enum.YuanUpper {
 			t.Fatalf("%s: leader day is not upper yuan", st)
 		}
 
@@ -91,8 +91,8 @@ func TestZhiRunSolsticeAdoption(t *testing.T) {
 	for year := 2010; year <= 2040; year++ {
 		for _, idx := range []int{0, 12} {
 			z := almanac.TermOf(year, idx)
-			zd := almanac.DayNumber(z.SolarTime())
-			lead := ((zd % 15) + 15) % 15
+			zd := z.DayNumber()
+			lead := floorMod(zd, 15)
 
 			leader := zd - lead
 			if lead > zhiRunThreshold {

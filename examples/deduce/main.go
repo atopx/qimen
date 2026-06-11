@@ -26,11 +26,7 @@ func main() {
 	timeArg := flag.String("time", "", "input time as YYYYMMDDHHMM (12 digits); default = current time")
 	flag.Parse()
 
-	c, err := qimen.From(parseInstant(*timeArg))
-	if err != nil {
-		panic(err)
-	}
-	printChart(c)
+	printChart(qimen.From(parseInstant(*timeArg)))
 }
 
 // parseInstant parses the -time flag value into a SolarTime.

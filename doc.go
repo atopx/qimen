@@ -9,7 +9,7 @@
 //	t, _ := time.Parse("2006-01-02 15:04", "2026-01-14 18:45")
 //	chart, _ := qimen.FromTime(t)               // standard library time.Time
 //	st, _ := almanac.SolarTimeOf(2026, 1, 14, 18, 45, 0)
-//	chart, _ := qimen.From(st)                  // first-class SolarTime
+//	chart := qimen.From(st)                     // first-class SolarTime, total
 //
 //	// Iterate the 9 palaces
 //	for n, p := range chart.Palaces() {
@@ -32,15 +32,20 @@
 //
 // # Options
 //
-//   - [WithMethod] selects the 起局法门 (currently only [enum.MethodTime])
-//   - [WithStyle] selects the 盘式 (currently only [enum.StyleRotate])
-//   - [WithJuRule] selects the 定局规则: 拆补 (default) or 置闰
+//   - [WithMethod] selects the 起局法门: 时家 (default), 日家, 月家,
+//     年家. The method picks the duty pillar (主柱) and the 局 source —
+//     时家 and 日家 share the per-day 节气三元 局; 月/年家 use the
+//     统宗 calendars and are always 阴遁.
+//   - [WithStyle] selects the 盘式: 转盘 (default, LuoShu ring rotation
+//     with the center 寄坤) or 飞盘 (palace-number flying with the
+//     center as a regular stop, 天禽 on its real palace and the NINE
+//     gods — 太常 included — covering every palace).
+//   - [WithJuRule] selects the 时家 / 日家 定局规则: 置闰 (default) or
+//     拆补.
 //
-// # Error sentinels
-//
-// Errors returned from chart construction wrap one of
-// [ErrUnsupportedMethod], [ErrUnsupportedStyle], or [ErrInvalidTime] —
-// callers can match with errors.Is.
+// Every option combination is implemented, so [From] and [New] are
+// total — only [FromTime] / [FromTimestamp] can fail, with
+// [ErrInvalidTime], on out-of-range calendar input.
 //
 // # Conventions
 //
@@ -48,11 +53,15 @@
 // diverge are fixed as follows:
 //
 //   - 三元 is derived from the day pillar 符头 grid (index mod 15). The
-//     局 is keyed to the astronomical term (拆补, default) or, with
-//     [WithJuRule], to the solstice-aligned 置闰 schedule (超神 / 接气,
-//     intercalating 芒种 / 大雪 when the leader's advance reaches nine
-//     days counted inclusively); [Chart.JuTerm] exposes the term used.
+//     时家 局 is keyed to the solstice-aligned 置闰 schedule by default
+//     (超神 / 接气, intercalating 芒种 / 大雪 when the leader's advance
+//     reaches nine days counted inclusively) — validated against
+//     authoritative reference charts (see qimen_golden_test.go); 拆补
+//     keys it to the astronomical term instead. [Chart.JuTerm] exposes
+//     the term actually used.
 //   - The day pillar switches at 23:00 (晚子时 counts as the next day).
-//   - The center-palace stem stays in place on the heaven plate (palace
-//     2 is not rendered with a second 寄宫 stem).
+//   - 暗干 follows the 值使: the earth stems shift together with the
+//     door plate (门下藏干).
+//   - Duty records report real palaces (the center included); the 寄坤
+//     projection exists only inside rotate-style plate arithmetic.
 package qimen

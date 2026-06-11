@@ -17,13 +17,13 @@ package enum
 type JuRule uint8
 
 const (
-	// JuRuleChaiBu 拆补法 (default).
-	JuRuleChaiBu JuRule = iota
-	// JuRuleZhiRun 置闰法.
-	JuRuleZhiRun
+	// JuRuleZhiRun 置闰法 (default).
+	JuRuleZhiRun JuRule = iota
+	// JuRuleChaiBu 拆补法.
+	JuRuleChaiBu
 )
 
-var juRuleNames = [2]string{"拆补", "置闰"}
+var juRuleNames = [2]string{"置闰", "拆补"}
 
 // Name returns the Chinese label.
 func (r JuRule) Name() string { return juRuleNames[r] }
