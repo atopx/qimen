@@ -79,6 +79,40 @@ func TestUnsupportedStyle(t *testing.T) {
 	}
 }
 
+// TestJuRule covers the 置闰 option against the 拆补 default on a known
+// 超神 instant: on 2024-01-01 the leader day precedes 小寒 (2024-01-06),
+// so 置闰 adopts 小寒's row early while 拆补 stays on the astronomical
+// 冬至.
+func TestJuRule(t *testing.T) {
+	st := solarTime(t, 2024, 1, 1, 12, 0, 0)
+
+	cb := MustFrom(st)
+	if cb.JuRule() != enum.JuRuleChaiBu {
+		t.Errorf("default JuRule: got %s, want 拆补", cb.JuRule().Name())
+	}
+	if cb.JuTerm() != cb.Term() {
+		t.Errorf("拆补 JuTerm: got %s, want Term() %s", cb.JuTerm().Name(), cb.Term().Name())
+	}
+	if cb.Term().Name() != "冬至" || cb.Ju() != 1 {
+		t.Errorf("拆补: got %s %d局, want 冬至 1局", cb.Term().Name(), cb.Ju())
+	}
+
+	zr := MustFrom(st, WithJuRule(enum.JuRuleZhiRun))
+	if zr.JuRule() != enum.JuRuleZhiRun {
+		t.Errorf("JuRule: got %s, want 置闰", zr.JuRule().Name())
+	}
+	if zr.Term().Name() != "冬至" {
+		t.Errorf("置闰 must keep the astronomical Term(): got %s", zr.Term().Name())
+	}
+	if zr.JuTerm().Name() != "小寒" || zr.Ju() != 2 {
+		t.Errorf("置闰 超神: got %s %d局, want 小寒 2局", zr.JuTerm().Name(), zr.Ju())
+	}
+	// Pillars are calendar facts — identical under both rules.
+	if zr.Month() != cb.Month() || zr.Day() != cb.Day() {
+		t.Error("pillars must not depend on JuRule")
+	}
+}
+
 // TestInvalidTimeErrorChain verifies invalid-time errors from the chart
 // entry points match the sentinel under both its qimen and almanac
 // names (ErrInvalidTime aliases almanac.ErrInvalidTime).

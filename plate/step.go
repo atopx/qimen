@@ -2,7 +2,8 @@ package plate
 
 import "github.com/atopx/qimen/almanac"
 
-// StepPalace advances one step in 阴/阳 遁 order, skipping the center.
+// StepPalace advances one step in 阴/阳 遁 order through the full 1..9
+// ring (the center palace is a regular stop — 地盘 lays a stem there).
 func StepPalace(palace uint8, yy almanac.YinYang) uint8 {
 	if yy == almanac.Yang {
 		if palace == 9 {
@@ -17,8 +18,9 @@ func StepPalace(palace uint8, yy almanac.YinYang) uint8 {
 }
 
 // MoveBy steps n times in 阴/阳 遁 order (forward for 阳, backward for
-// 阴, both through the full 1..9 ring). If the destination is center
-// (palace 5), it is reassigned to 2 (坤 fallback per qimen tradition).
+// 阴, both through the full 1..9 ring) and returns the real destination
+// palace — including the center (5). Callers needing a ring position
+// project the center to its 寄宫 (坤 2) themselves.
 // Precondition: palace ∈ [1, 9], steps ≥ 0.
 func MoveBy(palace uint8, steps int, yy almanac.YinYang) uint8 {
 	var idx int
@@ -27,11 +29,7 @@ func MoveBy(palace uint8, steps int, yy almanac.YinYang) uint8 {
 	} else {
 		idx = (int(palace)-1-steps)%9 + 9
 	}
-	target := uint8(idx%9 + 1)
-	if target == 5 {
-		return 2
-	}
-	return target
+	return uint8(idx%9 + 1)
 }
 
 // AreOpposite reports whether two palaces are diametrically opposite.

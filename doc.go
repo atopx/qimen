@@ -34,6 +34,7 @@
 //
 //   - [WithMethod] selects the 起局法门 (currently only [enum.MethodTime])
 //   - [WithStyle] selects the 盘式 (currently only [enum.StyleRotate])
+//   - [WithJuRule] selects the 定局规则: 拆补 (default) or 置闰
 //
 // # Error sentinels
 //
@@ -46,8 +47,11 @@
 // The layout follows mainstream 时家转盘 practice; points where schools
 // diverge are fixed as follows:
 //
-//   - 三元 is derived directly from the day pillar (index mod 15),
-//     without 拆补 or 置闰 adjustments.
+//   - 三元 is derived from the day pillar 符头 grid (index mod 15). The
+//     局 is keyed to the astronomical term (拆补, default) or, with
+//     [WithJuRule], to the solstice-aligned 置闰 schedule (超神 / 接气,
+//     intercalating 芒种 / 大雪 when the leader's advance reaches nine
+//     days counted inclusively); [Chart.JuTerm] exposes the term used.
 //   - The day pillar switches at 23:00 (晚子时 counts as the next day).
 //   - The center-palace stem stays in place on the heaven plate (palace
 //     2 is not rendered with a second 寄宫 stem).

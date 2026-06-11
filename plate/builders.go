@@ -17,26 +17,23 @@ func BuildEarth(yy almanac.YinYang, ju uint8) StemPlate {
 	return p
 }
 
-// BuildHeaven populates 天盘 from 地盘 + 值符原宫 + 时干落宫.
-func BuildHeaven(earth *StemPlate, yy almanac.YinYang, zhiFuOriginalPalace, hourPalace uint8) StemPlate {
+// RotateStems rotates the 地盘 stems rigidly around the LuoShu ring by
+// the arc from palace `from` to palace `to` (the center stem stays in
+// place). Rotation is direction-free: 阴/阳 遁 only decide where the
+// duty lands, not how the ring turns. This single primitive lays both
+// rotated stem plates of a chart:
+//
+//   - 天盘: the stems follow the 值符 (from 值符原宫 to 时干落宫);
+//   - 暗干: the stems follow the 值使 (from 值使门本位宫 to 值使落宫).
+//
+// Precondition: from, to ∈ [1, 9] \ {5} (center is projected to 坤 2
+// by the caller).
+func RotateStems(earth *StemPlate, from, to uint8) StemPlate {
 	var p StemPlate
-	zhiFuIdx := int(tables.LuoShuIndex[zhiFuOriginalPalace])
-	hourIdx := int(tables.LuoShuIndex[hourPalace])
-	var steps int
-	if yy == almanac.Yang {
-		steps = (hourIdx + 8 - zhiFuIdx) % 8
-	} else {
-		steps = (zhiFuIdx + 8 - hourIdx) % 8
-	}
+	shift := (int(tables.LuoShuIndex[to]) - int(tables.LuoShuIndex[from]) + 8) % 8
 	for i, palace := range tables.LuoShuOrder {
 		if stem, ok := earth.Get(palace); ok {
-			var targetIdx int
-			if yy == almanac.Yang {
-				targetIdx = (i + steps) % 8
-			} else {
-				targetIdx = (i + 8 - steps) % 8
-			}
-			p.Set(tables.LuoShuOrder[targetIdx], stem)
+			p.Set(tables.LuoShuOrder[(i+shift)%8], stem)
 		}
 	}
 	if center, ok := earth.Get(5); ok {
@@ -65,34 +62,28 @@ func BuildStar(zhiFuOriginalPalace, hourPalace uint8) StarPlate {
 	return p
 }
 
-// BuildDoor populates 八门盘 and returns the 值使落宫 alongside it.
+// BuildDoor populates 八门盘 and returns the (real, possibly center)
+// 值使落宫 alongside it.
 //
-// zhiShiOriginalPalace is the home palace of the 值使 door (= 值符原宫);
-// the door advances from there by the number of 时辰 elapsed since the
-// 旬首, which also determines the rotation of the other seven doors.
-func BuildDoor(yy almanac.YinYang, zhiShiOriginalPalace uint8, hour almanac.Cycle) (DoorPlate, uint8) {
+// The 值使 door marches from the real 值符原宫 (marchFrom, which may be
+// the center palace 5) by the number of 时辰 elapsed since the 旬首;
+// the eight doors then rotate rigidly by the arc from the door's home
+// palace (zhiShiHome, the 寄坤 projection of the origin) to the landing
+// palace (likewise projected when it is the center).
+func BuildDoor(yy almanac.YinYang, zhiShiHome, marchFrom uint8, hour almanac.Cycle) (DoorPlate, uint8) {
 	var p DoorPlate
 	xunStartBranchIdx := hour.Ten().FirstBranch().Index()
 	hourBranchIdx := hour.Branch().Index()
 	branchSteps := (hourBranchIdx + 12 - xunStartBranchIdx) % 12
-	zhiShiPalace := MoveBy(zhiShiOriginalPalace, branchSteps, yy)
-	zhiShiOriginIdx := int(tables.LuoShuIndex[zhiShiOriginalPalace])
-	zhiShiIdx := int(tables.LuoShuIndex[zhiShiPalace])
-	var steps int
-	if yy == almanac.Yang {
-		steps = (zhiShiIdx + 8 - zhiShiOriginIdx) % 8
-	} else {
-		steps = (zhiShiOriginIdx + 8 - zhiShiIdx) % 8
+	zhiShiPalace := MoveBy(marchFrom, branchSteps, yy)
+	landEff := zhiShiPalace
+	if landEff == 5 {
+		landEff = 2
 	}
+	shift := (int(tables.LuoShuIndex[landEff]) - int(tables.LuoShuIndex[zhiShiHome]) + 8) % 8
 	for i, originalPalace := range tables.LuoShuOrder {
-		var targetIdx int
-		if yy == almanac.Yang {
-			targetIdx = (i + steps) % 8
-		} else {
-			targetIdx = (i + 8 - steps) % 8
-		}
 		// LuoShuOrder excludes center palace 5; every entry has a door.
-		p.Set(tables.LuoShuOrder[targetIdx], enum.DoorOfPalace(originalPalace))
+		p.Set(tables.LuoShuOrder[(i+shift)%8], enum.DoorOfPalace(originalPalace))
 	}
 	return p, zhiShiPalace
 }
@@ -114,17 +105,6 @@ func BuildGod(yy almanac.YinYang, zhiFuPalace uint8) GodPlate {
 			pos = (start - i + 8) % 8
 		}
 		p.Set(tables.LuoShuOrder[pos], god)
-	}
-	return p
-}
-
-// BuildHidden populates 暗干盘 (从 8 宫起).
-func BuildHidden(yy almanac.YinYang) StemPlate {
-	var p StemPlate
-	palace := uint8(8)
-	for _, stemIdx := range tables.SanQiLiuYi {
-		p.Set(palace, almanac.StemOf(int(stemIdx)))
-		palace = StepPalace(palace, yy)
 	}
 	return p
 }

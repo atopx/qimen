@@ -75,15 +75,23 @@ func dayCycleAtNoon(year, month, day int) Cycle {
 	return CycleOf(int(math.Floor(noonJD+0.5)) - jdJiaZiDayAnchor)
 }
 
+// DayNumber returns the continuous day ordinal aligned with the day
+// pillar: day 0 is 2000-01-07 (a 甲子 day), and hour 23 rolls to the
+// next day (晚子时 convention), so CycleOf(DayNumber(s)) always equals
+// the day pillar of s. Useful for day-grid arithmetic such as 符头
+// (15-day leader) alignment.
+func DayNumber(s SolarTime) int {
+	noonJD := julianDayFromYmdhms(int(s.Year), int(s.Month), int(s.Day), 12, 0, 0)
+	n := int(math.Floor(noonJD+0.5)) - jdJiaZiDayAnchor
+	if s.Hour == 23 {
+		n++
+	}
+	return n
+}
+
 // dayPillar derives the day pillar; hour 23 rolls to the next day
 // (晚子时 convention: the day switches at 23:00).
-func dayPillar(s SolarTime) Cycle {
-	c := dayCycleAtNoon(int(s.Year), int(s.Month), int(s.Day))
-	if s.Hour == 23 {
-		return c.Next(1)
-	}
-	return c
-}
+func dayPillar(s SolarTime) Cycle { return CycleOf(DayNumber(s)) }
 
 // hourPillarFromDay derives the hour pillar from the day pillar.
 // At day stem ds, 子时 (hour branch 0) has stem (ds*2) mod 10, so the

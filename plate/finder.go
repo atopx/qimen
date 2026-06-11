@@ -21,22 +21,18 @@ func FindStem(p *StemPlate, stem almanac.Stem, excludeCenter bool) (uint8, bool)
 	return 0, false
 }
 
-// FindHourStem locates the palace of the current 时辰 heavenly stem.
-//
-// 甲 stem is "hidden" so it is mapped to zhiFuPalace. Other stems are
-// looked up in the StemPlate; if found in center (palace 5), the
-// classical 寄宫 rule maps it to 2 (坤).
-func FindHourStem(p *StemPlate, stem almanac.Stem, zhiFuPalace uint8) uint8 {
-	if stem.Index() == 0 {
-		return zhiFuPalace
+// FindHourStem locates the palace of the current 时辰 heavenly stem on
+// the earth plate. 甲 is hidden and maps to the 值符原宫. The center
+// palace (5) is returned as-is — callers project it to 2 (坤) where a
+// plate rotation needs a ring position.
+func FindHourStem(p *StemPlate, stem almanac.Stem, zhiFuOriginalPalace uint8) uint8 {
+	if stem == almanac.Jia {
+		return zhiFuOriginalPalace
 	}
-	if palace, ok := FindStem(p, stem, true); ok {
+	if palace, ok := FindStem(p, stem, false); ok {
 		return palace
 	}
-	if c, ok := p.Get(5); ok && c.Index() == stem.Index() {
-		return 2
-	}
-	return zhiFuPalace
+	return zhiFuOriginalPalace
 }
 
 // FindDoor searches a DoorPlate for a particular door.

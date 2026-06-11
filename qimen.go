@@ -22,11 +22,13 @@ import (
 type Chart struct {
 	method enum.Method
 	style  enum.Style
+	juRule enum.JuRule
 
 	// Pillars + solar context
 	solar    almanac.SolarTime
 	pillars  almanac.Pillars
 	term     almanac.Term
+	juTerm   almanac.Term // 用局节气 (== term under 拆补)
 	yinYang  almanac.YinYang
 	ju       uint8
 	yuan     enum.Yuan
@@ -45,6 +47,7 @@ type Chart struct {
 type config struct {
 	method enum.Method
 	style  enum.Style
+	juRule enum.JuRule
 }
 
 // Option configures a Chart constructor.
@@ -58,6 +61,13 @@ func WithMethod(m enum.Method) Option {
 // WithStyle selects the chart style (currently only [enum.StyleRotate]).
 func WithStyle(s enum.Style) Option {
 	return func(c *config) { c.style = s }
+}
+
+// WithJuRule selects how the 用局节气 is resolved: 拆补 (default) keys
+// the 局 to the astronomical term in effect, 置闰 keeps 符头 aligned
+// with the solstices by intercalating 芒种 / 大雪. See [enum.JuRule].
+func WithJuRule(r enum.JuRule) Option {
+	return func(c *config) { c.juRule = r }
 }
 
 // DutyStar is the 值符 entry: the 九星 currently acting as 值符, its
@@ -76,9 +86,14 @@ type DutyDoor struct {
 	Palace         uint8
 }
 
-// defaultConfig returns the default construction options: 时家 / 转盘.
+// defaultConfig returns the default construction options:
+// 时家 / 转盘 / 拆补.
 func defaultConfig() config {
-	return config{method: enum.MethodTime, style: enum.StyleRotate}
+	return config{
+		method: enum.MethodTime,
+		style:  enum.StyleRotate,
+		juRule: enum.JuRuleChaiBu,
+	}
 }
 
 // New builds a chart for the current instant (UTC+8 wall clock) with
@@ -150,13 +165,18 @@ func validateConfig(cfg config) error {
 // build is the shared chart-construction routine. cfg must already be
 // validated; build itself is total over its closed-domain inputs.
 func build(t almanac.SolarTime, cfg config) *Chart {
-	// Resolve the solar term once; pillars, 阴阳遁 and 局 all derive
-	// from it without further term lookups.
+	// Resolve the solar term once; pillars derive from the astronomical
+	// term, while 阴阳遁 and 局 derive from the 用局节气 (which 置闰
+	// may shift by one term to keep 符头 aligned with the solstices).
 	term := t.Term()
 	pillars := almanac.PillarsAt(t, term)
-	yinYang := term.YinYang()
+	juTerm := term
+	if cfg.juRule == enum.JuRuleZhiRun {
+		juTerm = compute.ZhiRunTerm(almanac.DayNumber(t), term)
+	}
+	yinYang := juTerm.YinYang()
 	yuan := compute.Yuan(pillars.Day)
-	ju := compute.Ju(term, yuan)
+	ju := compute.Ju(juTerm, yuan)
 
 	// Build the 6 plates. Style was validated at entry; primitives are
 	// total functions assuming StyleRotate semantics.
@@ -165,32 +185,32 @@ func build(t almanac.SolarTime, cfg config) *Chart {
 	xunShou := compute.XunShou(pillars.Hour)
 	hourStem := pillars.Hour.Stem()
 
-	// 值符原宫: the earth plate always contains the 旬首 stem (one of
-	// 戊..癸) outside the center; the fallback is defensive only.
+	// 值符原宫 / 落宫: the earth plate always contains the 旬首 stem
+	// (one of 戊..癸), possibly in the center palace. Duty records keep
+	// the real palaces (which may be 5); plate rotations and the duty
+	// door's home use the 寄坤 projection (5 → 2).
 	zhiFuOriginalPalace := uint8(2)
-	if p, ok := plate.FindStem(&earth, xunShou, true); ok {
+	if p, ok := plate.FindStem(&earth, xunShou, false); ok {
 		zhiFuOriginalPalace = p
 	}
 	zhiFuPalace := plate.FindHourStem(&earth, hourStem, zhiFuOriginalPalace)
+	origEff := projectCenter(zhiFuOriginalPalace)
+	landEff := projectCenter(zhiFuPalace)
 
-	heaven := plate.BuildHeaven(&earth, yinYang, zhiFuOriginalPalace, zhiFuPalace)
-	stars := plate.BuildStar(zhiFuOriginalPalace, zhiFuPalace)
-	doors, zhiShiPalace := plate.BuildDoor(yinYang, zhiFuOriginalPalace, pillars.Hour)
-	gods := plate.BuildGod(yinYang, zhiFuPalace)
-	hidden := plate.BuildHidden(yinYang)
+	// 天盘 follows the 值符; 暗干 follows the 值使 (same rotation as
+	// the door plate). The 值使 marches from the REAL origin palace
+	// (through the center if it starts there) while its door is the
+	// projected home's door.
+	heaven := plate.RotateStems(&earth, origEff, landEff)
+	stars := plate.BuildStar(origEff, landEff)
+	doors, zhiShiPalace := plate.BuildDoor(yinYang, origEff, zhiFuOriginalPalace, pillars.Hour)
+	gods := plate.BuildGod(yinYang, landEff)
+	hidden := plate.RotateStems(&earth, origEff, projectCenter(zhiShiPalace))
 
-	// Resolve 值符 (star landing on zhiFuPalace).
-	zhiFuStar := enum.StarQinRui
-	if s, ok := stars.Get(zhiFuPalace); ok {
-		zhiFuStar = s
-	}
-	// Resolve 值使 door (originating door from zhiFuOriginalPalace).
-	// zhiFuOriginalPalace is sourced from earth-plate stem search which
-	// only returns non-center palaces; DoorOfPalace is safe here.
-	zhiShiDoor := enum.DoorDeath
-	if zhiFuOriginalPalace != 5 {
-		zhiShiDoor = enum.DoorOfPalace(zhiFuOriginalPalace)
-	}
+	// 值符 is the home star of the real origin palace (center → 天禽);
+	// 值使 is the home door of its projection.
+	zhiFuStar := enum.StarOfPalace(zhiFuOriginalPalace)
+	zhiShiDoor := enum.DoorOfPalace(origEff)
 
 	kongWang := pillars.Hour.EmptyBranches()
 
@@ -282,9 +302,11 @@ func build(t almanac.SolarTime, cfg config) *Chart {
 	return &Chart{
 		method:   cfg.method,
 		style:    cfg.style,
+		juRule:   cfg.juRule,
 		solar:    t,
 		pillars:  pillars,
 		term:     term,
+		juTerm:   juTerm,
 		yinYang:  yinYang,
 		ju:       ju,
 		yuan:     yuan,
@@ -299,6 +321,15 @@ func build(t almanac.SolarTime, cfg config) *Chart {
 
 func patternPalace(p pattern.Pattern) uint8 { return p.Palace }
 func shenshaPalace(s shensha.ShenSha) uint8 { return s.Palace }
+
+// projectCenter maps the center palace to its 寄宫 (坤 2) for ring
+// positions; non-center palaces pass through.
+func projectCenter(palace uint8) uint8 {
+	if palace == 5 {
+		return 2
+	}
+	return palace
+}
 
 // bucketByPalace regroups detection results (each tagged with a palace
 // number 1..9) into 9 per-palace sub-slices of the SAME backing array:
@@ -340,6 +371,9 @@ func (c *Chart) Method() enum.Method { return c.method }
 // Style returns the chart's 盘式 (currently always StyleRotate).
 func (c *Chart) Style() enum.Style { return c.style }
 
+// JuRule returns the chart's 定局规则 (拆补 by default).
+func (c *Chart) JuRule() enum.JuRule { return c.juRule }
+
 // Year returns the 年柱 sixty cycle.
 func (c *Chart) Year() almanac.Cycle { return c.pillars.Year }
 
@@ -352,10 +386,18 @@ func (c *Chart) Day() almanac.Cycle { return c.pillars.Day }
 // Hour returns the 时柱 sixty cycle.
 func (c *Chart) Hour() almanac.Cycle { return c.pillars.Hour }
 
-// Term returns the current solar term.
+// Term returns the astronomical solar term in effect at the chart's
+// instant. The 局 may be keyed to a different term under 置闰 — see
+// [Chart.JuTerm].
 func (c *Chart) Term() almanac.Term { return c.term }
 
-// YinYang returns the 阴/阳 遁.
+// JuTerm returns the 用局节气 — the term whose row of the 局 table the
+// chart uses. Equal to [Chart.Term] under 拆补; under 置闰 it may lead
+// the astronomical term by one (超神) or trail it by one (接气 / during
+// an intercalated 芒种 / 大雪).
+func (c *Chart) JuTerm() almanac.Term { return c.juTerm }
+
+// YinYang returns the 阴/阳 遁 (derived from the 用局节气).
 func (c *Chart) YinYang() almanac.YinYang { return c.yinYang }
 
 // Ju returns the local 局 number (1..9).

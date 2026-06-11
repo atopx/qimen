@@ -54,8 +54,9 @@ go run ./examples/deduce
 
 ```go
 chart, err := qimen.From(st,
-    qimen.WithMethod(enum.MethodTime),    // 起局法门, 默认 MethodTime
-    qimen.WithStyle(enum.StyleRotate),    // 盘式, 默认 StyleRotate
+    qimen.WithMethod(enum.MethodTime),     // 起局法门, 默认 MethodTime
+    qimen.WithStyle(enum.StyleRotate),     // 盘式, 默认 StyleRotate
+    qimen.WithJuRule(enum.JuRuleZhiRun),   // 定局规则, 默认 JuRuleChaiBu (拆补)
 )
 ```
 
@@ -78,7 +79,12 @@ if errors.Is(err, qimen.ErrUnsupportedStyle)  { /* ... */ }
 
 流派分歧点的取舍如下 (时家转盘主流做法):
 
-- 三元由日柱直推 (`index mod 15`), 不做拆补/置闰;
+- 三元由日柱符头网格直推 (`index mod 15`), 两种定局规则共用;
+- 定局规则默认**拆补** (局随真实节气), 可选**置闰** (`WithJuRule(enum.JuRuleZhiRun)`):
+  符头与二至对齐, 超神/接气, 符头超前满九日 (含符头日的传统计数) 时在芒种/大雪置闰;
+  `chart.JuTerm()` 返回实际用局节气, `chart.Term()` 恒为天文节气;
+  置闰盘面已通过 14 组权威排盘结果逐项校验 (见 `qimen_golden_test.go`);
+- 暗干随值使转动: 八门转几步, 地盘干随转几步 (门下藏干);
 - 日柱 23 点换日 (晚子时归次日);
 - 天盘中宫干原位保留, 坤二宫不另显寄宫双干。
 
@@ -89,7 +95,8 @@ if errors.Is(err, qimen.ErrUnsupportedStyle)  { /* ... */ }
 | `SolarTime()`                                            | `almanac.SolarTime`                | 起局阳历时刻                        |
 | `LunarDay()`                                             | `almanac.LunarDay`                 | 对应农历日                          |
 | `Year/Month/Day/Hour()`                                  | `almanac.Cycle`                    | 四柱六十甲子                        |
-| `Term()`                                                 | `almanac.Term`                     | 当前节气                            |
+| `Term()`                                                 | `almanac.Term`                     | 当前天文节气                        |
+| `JuTerm()`                                               | `almanac.Term`                     | 用局节气 (拆补下同 `Term()`)        |
 | `YinYang()`                                              | `almanac.YinYang`                  | 阴/阳遁                             |
 | `Ju()`                                                   | `uint8`                            | 局数 (1..=9)                        |
 | `Yuan()`                                                 | `enum.Yuan`                        | 三元                                |
